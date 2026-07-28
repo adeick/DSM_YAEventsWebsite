@@ -19,8 +19,10 @@ const churches = [
   { name: "St. Augustin's", address: "545 42nd St, Des Moines, IA" },
   { name: "Our Lady's Immaculate Heart", address: "510 E First St, Ankeny, IA" },
   { name: "St. Luke the Evangelist", address: "1102 NW Weigel Dr, Ankeny, IA" },
-  { name: "Ss. John and Paul", address: "1401 1st Ave S, Altoona, IA" },
-  { name: "St. Elizabeth Seton", address: "2566 Scotch Ridge Rd, Carlisle, IA" },
+  { name: "St. Francis of Assisi", address: " 7075 Ashworth Rd, West Des Moines, IA" },
+  { name: "St. Pius X", address: "3663 66th St, Urbandale, IA" },
+  { name: "Sacred Heart", address: "1627 Grand Ave, West Des Moines, IA" },
+  { name: "St. Theresa", address: "1230 Merle Hay Rd, Des Moines, IA" },
 ]
 
 async function geocode(address) {
