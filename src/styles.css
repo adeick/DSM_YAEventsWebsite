@@ -29,6 +29,10 @@ body {
   padding: 28px 40px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--paper);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .app__header h1 {
@@ -132,16 +136,222 @@ body {
   line-height: 1.5;
 }
 
+.staff-link,
+.back-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.staff-link:hover,
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Admin / login / forms ──────────────────────────────────────── */
+
+.admin-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.admin-page--centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding-top: 80px;
+}
+
+.admin-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.admin-page__header h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.admin-page__header p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.admin-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-page__content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.login-form,
+.event-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+}
+
+.login-form {
+  max-width: 340px;
+}
+
+.login-form h2,
+.event-form h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.login-form label,
+.event-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.login-form input,
+.event-form input,
+.event-form textarea {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.event-form__row {
+  display: flex;
+  gap: 12px;
+}
+
+.event-form__row label {
+  flex: 1;
+}
+
+.login-form button,
+.event-form button,
+.admin-event-list button {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.login-form button:disabled,
+.event-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-page__header-actions button {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.form-error {
+  margin: 0;
+  font-size: 13px;
+  color: #b3402a;
+}
+
+.form-success {
+  margin: 0;
+  font-size: 13px;
+  color: #3d7a4d;
+}
+
+.admin-event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-event-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.admin-event-list__date {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.admin-event-list button {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-color: var(--line);
+  background: transparent;
+  color: #b3402a;
+}
+
 /* Mobile layout placeholder — map on top, cards scrolling horizontally
    below. Full implementation comes after the desktop version is done. */
+/* Mobile layout — map on top, cards scrolling horizontally below. */
 @media (max-width: 860px) {
   .app__main {
     grid-template-columns: 1fr;
-    grid-template-rows: 260px 1fr;
+    grid-template-rows: 1fr 200px;
+  }
+
+  .app__map {
+    order: 1;
   }
 
   .app__events {
+    order: 2;
     border-right: none;
     border-top: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 16px;
+  }
+
+  .event-list {
+    flex-direction: row;
+    height: 100%;
+  }
+
+  .event-card {
+    min-width: 240px;
+    flex-shrink: 0;
   }
 }
