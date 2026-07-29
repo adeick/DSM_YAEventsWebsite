@@ -34,6 +34,12 @@ function sizeForZoom(zoom) {
   return Math.round(MIN_MARKER_SIZE + t * (MAX_MARKER_SIZE - MIN_MARKER_SIZE))
 }
 
+// Labels only appear once zoomed in past this point — showing full
+// names at low zoom (especially with position offsets pulling churches
+// closer together) would just clutter the map.
+const LABEL_MIN_ZOOM = 12
+const LABEL_EXTRA_HEIGHT = 26
+
 // Manual nudges (in degrees) for specific churches that sit too close
 // together at low zoom. Only add entries for churches that actually
 // need it — everyone else uses their real coordinates. Keyed by the
@@ -65,14 +71,14 @@ function positionForZoom(church, zoom) {
   ]
 }
 
-// Church photos are transparent PNG cutouts — size is set on the
-// wrapper div (plain inline style, no specificity fight needed) while
-// the img itself stays at width/height:100% via CSS.
+// Church photos are transparent PNG cutouts — size is set on the photo
+// wrapper (plain inline style, no specificity fight needed) while the
+// img itself stays at width/height:100% via CSS.
 function iconFor(church, size) {
   if (!church.icon_url) return DEFAULT_ICON
   return L.divIcon({
     className: 'church-marker-icon',
-    html: `<div class="church-marker" style="width:${size}px;height:${size}px;"><img src="${church.icon_url}" alt="${escapeHtml(church.name)}" /></div>`,
+    html: `<div class="church-marker__photo" style="width:${size}px;height:${size}px;"><img src="${church.icon_url}" alt="${escapeHtml(church.name)}" /></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, Math.round(size * 0.92)],
   })
@@ -93,6 +99,30 @@ function FitToChurches({ churches }) {
   return null
 }
 
+// Leaflet measures its container's size once, at mount. If the
+// surrounding CSS grid hasn't finished laying out yet — or web fonts
+// are still loading and about to shift things — that initial
+// measurement can be wrong, and Leaflet has no way to know to recheck
+// on its own (it only reacts to the browser's own resize event, which
+// is why opening dev tools "fixes" it: that resizes the viewport).
+// This forces a remeasure right after mount and again once fonts
+// settle, instead of relying on a coincidental resize.
+function InvalidateSizeOnReady() {
+  const map = useMap()
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => map.invalidateSize())
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => map.invalidateSize())
+    }
+
+    return () => cancelAnimationFrame(frame)
+  }, [map])
+
+  return null
+}
+
 // Re-renders markers at a size matching the zoom level. Triggered by
 // zoomanim (fires right as the zoom transition starts, with the target
 // zoom already known) rather than zoomend (fires after it finishes) so
@@ -105,22 +135,31 @@ function ZoomScaledMarkers({ churches }) {
 
   useMapEvents({
     zoomanim: (e) => setZoom(e.zoom),
+    zoom: () => setZoom(map.getZoom()),
     zoomend: () => setZoom(map.getZoom()),
-  })
+    })
 
   const size = sizeForZoom(zoom)
+  const showLabel = zoom >= LABEL_MIN_ZOOM
 
   return (
     <>
       {churches.map((church) => (
         <Marker
-        key={church.id}
-        position={positionForZoom(church, zoom)}
-        icon={iconFor(church, size)}
+          key={church.id}
+          position={positionForZoom(church, zoom)}
+          icon={iconFor(church, size)}
         >
-          <Tooltip direction="top" offset={[0, -Math.round(size * 0.85)]}>
+          <Tooltip
+            key={showLabel ? 'label' : 'hover'}
+            permanent={showLabel}
+            direction="bottom"
+            offset={[0, -Math.round(size * 0.28)]}
+            opacity={1}
+            className="church-marker-tooltip"
+            >
             {church.name}
-          </Tooltip>
+            </Tooltip>
         </Marker>
       ))}
     </>
@@ -147,7 +186,10 @@ export default function ChurchMap() {
     <MapContainer
       center={DES_MOINES_CENTER}
       zoom={11}
-      scrollWheelZoom={false}
+      scrollWheelZoom={true}
+      zoomSnap={0}
+      zoomDelta={0.5}
+      wheelPxPerZoomLevel={100}
       className="church-map"
     >
       <TileLayer
@@ -156,6 +198,7 @@ export default function ChurchMap() {
         subdomains="abcd"
       />
       <FitToChurches churches={churches} />
+      <InvalidateSizeOnReady />
       <ZoomScaledMarkers churches={churches} />
     </MapContainer>
   )

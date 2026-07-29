@@ -9,20 +9,24 @@
 // parish directory (Des Moines metro only — add more rows as you like).
 
 const churches = [
-  { name: "St. Ambrose Cathedral", address: "607 High St, Des Moines, IA" },
-  { name: "Basilica of St. John", address: "1915 University Ave, Des Moines, IA" },
-  { name: "All Saints", address: "650 NE 52nd Ave, Des Moines, IA" },
-  { name: "Christ the King", address: "5711 SW 9th St, Des Moines, IA" },
-  { name: "Holy Trinity", address: "2926 Beaver Ave, Des Moines, IA" },
-  { name: "Our Lady of the Americas", address: "1271 E 9th St, Des Moines, IA" },
-  { name: "St. Anthony's", address: "15 Indianola Rd, Des Moines, IA" },
-  { name: "St. Augustin's", address: "545 42nd St, Des Moines, IA" },
-  { name: "Our Lady's Immaculate Heart", address: "510 E First St, Ankeny, IA" },
-  { name: "St. Luke the Evangelist", address: "1102 NW Weigel Dr, Ankeny, IA" },
-  { name: "St. Francis of Assisi", address: " 7075 Ashworth Rd, West Des Moines, IA" },
-  { name: "St. Pius X", address: "3663 66th St, Urbandale, IA" },
-  { name: "Sacred Heart", address: "1627 Grand Ave, West Des Moines, IA" },
-  { name: "St. Theresa", address: "1230 Merle Hay Rd, Des Moines, IA" },
+//   { name: "St. Ambrose Cathedral", address: "607 High St, Des Moines, IA" },
+//   { name: "Basilica of St. John", address: "1915 University Ave, Des Moines, IA" },
+//   { name: "All Saints", address: "650 NE 52nd Ave, Des Moines, IA" },
+//   { name: "Christ the King", address: "5711 SW 9th St, Des Moines, IA" },
+//   { name: "Holy Trinity", address: "2926 Beaver Ave, Des Moines, IA" },
+//   { name: "Our Lady of the Americas", address: "1271 E 9th St, Des Moines, IA" },
+//   { name: "St. Anthony's", address: "15 Indianola Rd, Des Moines, IA" },
+//   { name: "St. Augustin's", address: "545 42nd St, Des Moines, IA" },
+//   { name: "Our Lady's Immaculate Heart", address: "510 E First St, Ankeny, IA" },
+//   { name: "St. Luke the Evangelist", address: "1102 NW Weigel Dr, Ankeny, IA" },
+//   { name: "St. Francis of Assisi", address: " 7075 Ashworth Rd, West Des Moines, IA" },
+//   { name: "St. Pius X", address: "3663 66th St, Urbandale, IA" },
+//   { name: "Sacred Heart", address: "1627 Grand Ave, West Des Moines, IA" },
+//   { name: "St. Theresa", address: "1230 Merle Hay Rd, Des Moines, IA" },
+  { name: "St. Joseph", address: "3300 Easton Blvd, Des Moines, IA" },
+  { name: "St. Peter", address: "612 E 18th St, Des Moines, IA" },
+  { name: "St. Mary", address: "4600 Meredith Dr, Des Moines, IA" },
+  { name: "St. Catherine of Siena", address: "1150 28th Street, Des Moines, IA" },
 ]
 
 async function geocode(address) {
