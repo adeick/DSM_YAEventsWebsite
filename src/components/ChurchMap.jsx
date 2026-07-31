@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '../supabaseClient'
@@ -132,12 +132,25 @@ function InvalidateSizeOnReady() {
 function ZoomScaledMarkers({ churches }) {
   const map = useMap()
   const [zoom, setZoom] = useState(map.getZoom())
+  const frameRef = useRef(null)
+
+  // Coalesces however many 'zoom' events fire within a single frame
+  // (can be more than one during a fast scroll) into a single state
+  // update, instead of re-rendering (and recreating every marker's
+  // icon) once per raw event.
+  function scheduleZoomUpdate() {
+    if (frameRef.current) return
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null
+      setZoom(map.getZoom())
+    })
+  }
 
   useMapEvents({
     zoomanim: (e) => setZoom(e.zoom),
-    zoom: () => setZoom(map.getZoom()),
+    zoom: scheduleZoomUpdate,
     zoomend: () => setZoom(map.getZoom()),
-    })
+  })
 
   const size = sizeForZoom(zoom)
   const showLabel = zoom >= LABEL_MIN_ZOOM
