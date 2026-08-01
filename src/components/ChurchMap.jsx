@@ -19,11 +19,12 @@ const MARKER_ICON = L.divIcon({
 // churches whose labels actually collide with a neighbor.
 // [x, y] in pixels, added on top of the base offset below; negative x
 // is left, negative y is further up.
-const BASE_LABEL_OFFSET = [0, -14]
+const BASE_LABEL_OFFSET = [0, -5]
 
 const LABEL_OFFSETS = {
-  // 'St. Ambrose Cathedral': [10, -8],
-  // 'Basilica of St. John': [-10, 8],
+  'St. Theresa': [-30, 45],
+  'St. Catherine of Siena': [-55, 0],
+  'Basilica of St. John': [70, 22],
 }
 
 function labelOffset(church) {
@@ -191,10 +192,9 @@ const TILE_URLS = {
 // Fallback center used only until churches load and fitBounds takes over.
 const DES_MOINES_CENTER = [41.5868, -93.625]
 
-export default function ChurchMap() {
+export default function ChurchMap({ theme, onToggleTheme }) {
   const [churches, setChurches] = useState([])
   const [selectedChurch, setSelectedChurch] = useState(null)
-  const [theme, setTheme] = useState('light')
 
   useEffect(() => {
     async function loadChurches() {
@@ -207,14 +207,12 @@ export default function ChurchMap() {
   }, [])
 
   return (
-    // data-theme drives the light/dark CSS overrides in styles.css for
-    // the marker dot, label pill, card, and toggle button itself.
-    <div className="church-map-shell" data-theme={theme}>
-      <button
-        type="button"
-        className="church-theme-toggle"
-        onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
-      >
+    // No data-theme here — the outer .app element in PublicPage
+    // already carries it, and [data-theme='dark'] selectors in
+    // styles.css match on any ancestor, so this stays in sync with
+    // the header/sidebar for free.
+    <div className="church-map-shell">
+      <button type="button" className="church-theme-toggle" onClick={onToggleTheme}>
         {theme === 'light' ? 'Dark map' : 'Light map'}
       </button>
       <MapContainer

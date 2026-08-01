@@ -1,3 +1,10 @@
+/* Cinzel is the standard free substitute for Trajan (a paid Adobe
+   font not embeddable without an Adobe Fonts subscription) — modeled
+   on the same Roman inscriptional capitals. If you ever add a
+   licensed Trajan Pro via Adobe Fonts elsewhere on the page, it'll be
+   picked up automatically since it's listed first in the stack below. */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap');
+
 :root {
   --ink: #1c1c1a;
   --ink-soft: #6b6b66;
@@ -6,6 +13,25 @@
   --line: #e6e5e0;
   --accent: #7a6a53;
   --radius: 10px;
+  --surface-translucent: rgba(250, 250, 248, 0.92);
+  --modal-backdrop: rgba(28, 28, 26, 0.25);
+}
+
+/* Dark mode: redefining the variables above (rather than overriding
+   individual components) means anything already styled with var(--ink),
+   var(--card), etc. — the header, event sidebar, cards, links — goes
+   dark automatically. Scoped to .app so it only takes effect once
+   PublicPage sets data-theme="dark", and cascades to every descendant,
+   including the map (data-theme lives on .app, not on the map itself). */
+.app[data-theme='dark'] {
+  --ink: #f5f3ee;
+  --ink-soft: #a8a6a0;
+  --paper: #141414;
+  --card: #1c1c1c;
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #e8c37a;
+  --surface-translucent: rgba(20, 20, 20, 0.85);
+  --modal-backdrop: rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -23,9 +49,13 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .app__header {
+  position: relative;
+  z-index: 5;
   padding: 28px 40px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--paper);
@@ -37,15 +67,39 @@ body {
 
 .app__header h1 {
   margin: 0 0 4px;
+  font-family: 'Trajan Pro', 'Cinzel', Georgia, serif;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.app__header-accent {
+  color: var(--accent);
 }
 
 .app__header p {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
+  font-style: italic;
+}
+
+/* Hidden on desktop — shown only inside the mobile media query below,
+   where it toggles the sidebar overlay. */
+.hamburger-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  font-size: 18px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
 }
 
 .app__main {
@@ -53,16 +107,57 @@ body {
   display: grid;
   grid-template-columns: minmax(320px, 440px) 1fr;
   min-height: 0;
+  position: relative;
 }
 
-.app__events {
-  overflow-y: auto;
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 24px;
   border-right: 1px solid var(--line);
 }
 
+.commute-button {
+  flex-shrink: 0;
+  width: 100%;
+  height: 75px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.sidebar__heading {
+  flex-shrink: 0;
+  margin: 20px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar__events {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sidebar__footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
 .app__map {
   position: relative;
+  background: var(--paper);
 }
 
 .church-map {
@@ -70,12 +165,60 @@ body {
   height: 100%;
 }
 
+/* Leaflet's default stylesheet gives the map container a light gray
+   background (#ddd) that shows through in the gaps before tiles have
+   loaded — in dark mode that reads as a white/light flash on every
+   pan, zoom, and initial load. Matching it to the current theme's
+   paper color means that gap is dark already, so there's nothing to
+   flash. */
+.leaflet-container {
+  background: var(--paper);
+}
+
+/* Leaflet's default zoom control (+/- buttons) ships with a hardcoded
+   white background and dark icons, so it doesn't follow the theme
+   like everything else. Restyled with the same variables as the rest
+   of the map UI. */
+.leaflet-control-zoom a {
+  background: var(--card) !important;
+  color: var(--ink) !important;
+  border-color: var(--line) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--surface-translucent) !important;
+}
+
+/* CARTO and OpenStreetMap require attribution to stay visible per
+   their usage terms (see note in chat) — kept, but shrunk down and
+   theme-matched so it reads as a quiet credit line instead of a
+   default Leaflet-gray badge. */
+.leaflet-control-attribution {
+  background: var(--surface-translucent) !important;
+  color: var(--ink-soft) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--ink-soft) !important;
+}
+
+/* Leaflet's own "flag" icon in the attribution control (linking to
+   leafletjs.com) — not required by any license, just a visual clash
+   with the theme, so it's hidden while the required OSM/CARTO text
+   stays. */
+.leaflet-control-attribution .leaflet-attribution-flag {
+  display: none !important;
+}
+
 /* Wraps the map + toggle button + card so the toggle can be
-   positioned over the map, and so data-theme has one place to live
-   that covers everything below (including the Leaflet panes, which
-   render inside .church-map). */
+   positioned over the map. Theme itself lives on the outer .app
+   element in PublicPage — CSS variables redefined there cascade down
+   into everything here. z-index keeps the map (and everything on it)
+   above the header if the two ever visually overlap. */
 .church-map-shell {
   position: relative;
+  z-index: 50;
   width: 100%;
   height: 100%;
 }
@@ -90,7 +233,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: var(--ink);
-  background: rgba(250, 250, 248, 0.92);
+  background: var(--surface-translucent);
   border: 1px solid var(--line);
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
@@ -117,7 +260,7 @@ body {
    (permanent) and clickable — it doubles as the marker's label and
    its click target. */
 .leaflet-tooltip.church-marker-tooltip {
-  background: rgba(250, 250, 248, 0.92);
+  background: var(--surface-translucent);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 2px 8px;
@@ -135,14 +278,23 @@ body {
 }
 
 /* Placeholder card shown when a church marker/label is clicked.
-   Functional scaffolding only — final visual design is a later pass. */
+   Functional scaffolding only — final visual design is a later pass.
+   padding-top nudges the centered card down from dead-center. Uses
+   vh, not %, on purpose: percentage padding-top/bottom is always
+   resolved against the CONTAINING BLOCK'S WIDTH per the CSS spec
+   (yes, even for vertical padding) — so a % value here would shrink
+   as the map got narrower, pulling the card back up toward center on
+   skinnier screens even though nothing about the vertical space
+   changed. vh ties it to viewport height instead, so it stays put
+   regardless of width. */
 .church-card-overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(28, 28, 26, 0.25);
+  padding-top: 8vh;
+  background: var(--modal-backdrop);
   z-index: 1000;
 }
 
@@ -156,14 +308,21 @@ body {
 }
 
 /* Transparent-background church image, floated above the card and
-   overlapping its top edge rather than living inside the box. */
+   overlapping its top edge rather than living inside the box. Fixed
+   height + auto width (rather than a fixed square) so the image
+   keeps its real aspect ratio — a wide building photo and a narrow
+   one both display at their true proportions instead of being
+   squeezed into the same box. The height cap is intentionally
+   tighter than the width cap so a tall narrow church doesn't dwarf a
+   wide one the way an equal box would. */
 .church-card__photo {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translate(-50%, -58%);
-  width: 150px;
-  height: 150px;
+  transform: translate(-50%, -80%);
+  height: 300px;
+  width: auto;
+  max-width: 95%;
   object-fit: contain;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.4));
   pointer-events: none;
@@ -172,6 +331,7 @@ body {
 
 .church-card {
   position: relative;
+  min-height: 480px;
   max-height: 100%;
   overflow-y: auto;
   padding: 20px;
@@ -207,56 +367,6 @@ body {
   color: var(--ink-soft);
   font-size: 14px;
   text-align: center;
-}
-
-/* ---- Dark mode ---- everything below overrides the light defaults
-   above when the "Dark map" toggle is on. Kept as a single block so
-   the two palettes are easy to compare and edit side by side. */
-
-[data-theme='dark'] .church-theme-toggle {
-  color: #f5f3ee;
-  background: rgba(20, 20, 20, 0.85);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-[data-theme='dark'] .church-marker__dot {
-  background: #e8c37a;
-  border-color: #1c1c1a;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-}
-
-[data-theme='dark'] .leaflet-tooltip.church-marker-tooltip {
-  background: rgba(20, 20, 20, 0.85);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #f5f3ee;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-[data-theme='dark'] .church-card-overlay {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-[data-theme='dark'] .church-card__photo {
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
-}
-
-[data-theme='dark'] .church-card {
-  background: #1c1c1c;
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  color: #f5f3ee;
-}
-
-[data-theme='dark'] .church-card__close {
-  color: rgba(245, 243, 238, 0.6);
-}
-
-[data-theme='dark'] .church-card h2 {
-  color: #f5f3ee;
-}
-
-[data-theme='dark'] .church-card p {
-  color: rgba(245, 243, 238, 0.65);
 }
 
 
@@ -513,35 +623,54 @@ body {
   color: #b3402a;
 }
 
-/* Mobile layout placeholder — map on top, cards scrolling horizontally
-   below. Full implementation comes after the desktop version is done. */
-/* Mobile layout — map on top, cards scrolling horizontally below. */
+/* Mobile layout: the map fills the whole area below the header at all
+   times, and the sidebar becomes a hidden full-page overlay (toggled
+   by the hamburger button in the header) instead of the desktop's
+   fixed side-by-side columns. */
 @media (max-width: 860px) {
   .app__main {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 200px;
+    grid-template-rows: 1fr;
+    overflow: hidden;
   }
 
-  .app__map {
-    order: 1;
+  .app__header {
+    padding: 20px 52px 16px 16px;
   }
 
-  .app__events {
-    order: 2;
+  .app__header h1 {
+    font-size: 19px;
+  }
+
+  .hamburger-button {
+    display: inline-flex;
+    position: absolute;
+    top: 18px;
+    right: 12px;
+  }
+
+  /* Always in the layout (unlike display:none, transform can
+     animate), just pushed fully below the visible area and
+     unclickable until opened. */
+  .sidebar {
+    position: absolute;
+    inset: 0;
+    z-index: 1200;
+    background: var(--paper);
     border-right: none;
-    border-top: 1px solid var(--line);
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 16px;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    pointer-events: none;
   }
 
-  .event-list {
-    flex-direction: row;
-    height: 100%;
+  .sidebar--open {
+    transform: translateY(0);
+    pointer-events: auto;
   }
 
-  .event-card {
-    min-width: 240px;
-    flex-shrink: 0;
+  /* Pinch-to-zoom covers this on touch devices, and the buttons eat
+     into the map's limited vertical space at this width. */
+  .leaflet-control-zoom {
+    display: none;
   }
 }
