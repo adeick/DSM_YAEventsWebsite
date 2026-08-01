@@ -1,108 +1,46 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '../supabaseClient'
 
-// Fallback pin used only if a church doesn't have a photo set.
-const DEFAULT_ICON = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+// Every church gets the same small marker — no photos on the map
+// itself anymore, and no clustering. The church's name is shown next
+// to it at all times via a permanent Tooltip (see ChurchMarker below).
+const MARKER_ICON = L.divIcon({
+  className: 'church-marker-icon',
+  html: '<div class="church-marker__dot"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
 })
 
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]))
+// Labels sit directly above the marker by default. Manual pixel
+// nudges here shift only the LABEL, never the marker itself — the dot
+// always stays at the church's real coordinates. Only add entries for
+// churches whose labels actually collide with a neighbor.
+// [x, y] in pixels, added on top of the base offset below; negative x
+// is left, negative y is further up.
+const BASE_LABEL_OFFSET = [0, -14]
+
+const LABEL_OFFSETS = {
+  // 'St. Ambrose Cathedral': [10, -8],
+  // 'Basilica of St. John': [-10, 8],
 }
 
-// Marker footprint scales with zoom instead of clustering: small and
-// out of each other's way when zoomed out, big enough to see detail
-// when zoomed in. Linear interpolation between a floor and a ceiling
-// size, clamped to the zoom range below.
-const MIN_ZOOM_FOR_SCALE = 10
-const MAX_ZOOM_FOR_SCALE = 16
-const MIN_MARKER_SIZE = 48
-const MAX_MARKER_SIZE = 256
-
-function sizeForZoom(zoom) {
-  const clamped = Math.min(Math.max(zoom, MIN_ZOOM_FOR_SCALE), MAX_ZOOM_FOR_SCALE)
-  const t = (clamped - MIN_ZOOM_FOR_SCALE) / (MAX_ZOOM_FOR_SCALE - MIN_ZOOM_FOR_SCALE)
-  return Math.round(MIN_MARKER_SIZE + t * (MAX_MARKER_SIZE - MIN_MARKER_SIZE))
-}
-
-// Labels appear once zoomed in past this point — lower this further if
-// you want them even sooner, or raise it if it feels cluttered once
-// more churches (and position offsets) are added.
-const LABEL_MIN_ZOOM = 12
-
-// Manual nudges (in degrees) for specific churches that sit too close
-// together at low zoom. Only add entries for churches that actually
-// need it — everyone else uses their real coordinates. Keyed by the
-// exact `name` value from the churches table.
-//
-// Rule of thumb at this latitude: 0.01 = ~0.7mi north/south, ~0.5mi
-// east/west. Nudge by small amounts (0.002–0.01) and check how it
-// looks zoomed out.
-const DISPLAY_OFFSETS = {
-  // 'St. Ambrose Cathedral': { lat: 0.006, lng: -0.008 },
-  // 'Basilica of St. John': { lat: -0.004, lng: 0.006 },
-}
-
-function clamp01(n) {
-  return Math.min(Math.max(n, 0), 1)
-}
-
-// Blends from the offset position (at/below MIN_ZOOM_FOR_SCALE) to the
-// true coordinates (at/above MAX_ZOOM_FOR_SCALE), using the same zoom
-// range as the size scaling above so both animate together.
-function positionForZoom(church, zoom) {
-  const offset = DISPLAY_OFFSETS[church.name]
-  if (!offset) return [church.latitude, church.longitude]
-
-  const t = clamp01((zoom - MIN_ZOOM_FOR_SCALE) / (MAX_ZOOM_FOR_SCALE - MIN_ZOOM_FOR_SCALE))
-  return [
-    church.latitude + offset.lat * (1 - t),
-    church.longitude + offset.lng * (1 - t),
-  ]
-}
-
-// Icons are built ONCE per church at a fixed physical size (never
-// recreated as zoom changes) — the visual size you actually see is
-// controlled purely by a CSS transform: scale() applied directly to
-// the DOM element on every zoom tick. This is the important part:
-// recreating a divIcon on every zoom step (the old approach) forces
-// Leaflet to tear out and reinsert a DOM node per marker per frame,
-// which is real, unavoidable jank. Scaling an existing element via
-// CSS transform is GPU-composited and costs almost nothing, which is
-// how map products handle this same problem.
-//
-// transform-origin is set to match iconAnchor's position within the
-// box (50% across, 92% down) so scaling happens around the anchor
-// point — the "pin tip" stays exactly where Leaflet placed it at any
-// scale, instead of the whole box shrinking toward its center.
-function iconFor(church) {
-  if (!church.icon_url) return DEFAULT_ICON
-  return L.divIcon({
-    className: 'church-marker-icon',
-    html: `<div class="church-marker__photo" style="width:${MAX_MARKER_SIZE}px;height:${MAX_MARKER_SIZE}px;transform-origin:50% 92%;"><img src="${church.icon_url}" alt="${escapeHtml(church.name)}" /></div>`,
-    iconSize: [MAX_MARKER_SIZE, MAX_MARKER_SIZE],
-    iconAnchor: [MAX_MARKER_SIZE / 2, Math.round(MAX_MARKER_SIZE * 0.92)],
-  })
+function labelOffset(church) {
+  const nudge = LABEL_OFFSETS[church.name]
+  if (!nudge) return BASE_LABEL_OFFSET
+  return [BASE_LABEL_OFFSET[0] + nudge[0], BASE_LABEL_OFFSET[1] + nudge[1]]
 }
 
 // Leaflet's built-in scrollWheelZoom re-triggers its own animated zoom
 // transition on nearly every wheel tick, interrupting the previous one
 // before it finishes (map._stop() runs at the start of every step).
-// That constant self-interruption is what caused the choppiness no
-// amount of tuning (debounce time, zoomSnap, transitions) could fix —
-// tuning parameters on a handler that fights itself doesn't help.
-// This replaces it with a direct, un-animated zoom update per wheel
-// event: no competing animation to interrupt, so each step lands
-// cleanly instead of visibly hopping.
+// That constant self-interruption is what caused choppiness no amount
+// of tuning (debounce time, zoomSnap, transitions) could fix — tuning
+// parameters on a handler that fights itself doesn't help. This
+// replaces it with a direct, un-animated zoom update per wheel event:
+// no competing animation to interrupt, so each step lands cleanly
+// instead of visibly hopping.
 const ZOOM_SENSITIVITY = 0.015
 const MAX_WHEEL_DELTA = 40
 
@@ -168,30 +106,51 @@ function InvalidateSizeOnReady() {
   return null
 }
 
-// A single marker. The icon is memoized so its object identity stays
-// stable across re-renders (React/Leaflet only recreates the DOM node
-// if church.icon_url or church.name actually changes) — the resize
-// itself never touches this icon object at all.
-function ChurchMarker({ church, zoom, showLabel, registerRef }) {
-  const icon = useMemo(
-    () => iconFor(church),
-    [church.icon_url, church.id, church.name],
-  )
-  const size = sizeForZoom(zoom)
+// Zoom level to fly to when a church is selected.
+const SELECTED_ZOOM = 16
 
+// Drives the "zoom in on select, zoom back out on close" behavior.
+// Captures the view (center + zoom) that was active right before a
+// church was selected, and restores exactly that view when the
+// selection is cleared — rather than snapping back to a fixed default.
+function SelectionZoom({ selectedChurch }) {
+  const map = useMap()
+  const previousView = useRef(null)
+
+  useEffect(() => {
+    if (selectedChurch) {
+      // Only capture "previous view" once per selection — not on
+      // every re-render while a church stays selected.
+      if (!previousView.current) {
+        previousView.current = { center: map.getCenter(), zoom: map.getZoom() }
+      }
+      map.flyTo([selectedChurch.latitude, selectedChurch.longitude], SELECTED_ZOOM)
+    } else if (previousView.current) {
+      map.flyTo(previousView.current.center, previousView.current.zoom)
+      previousView.current = null
+    }
+  }, [selectedChurch, map])
+
+  return null
+}
+
+// A single marker: a small dot plus an always-visible label. Clicking
+// either one selects the church.
+function ChurchMarker({ church, onSelect }) {
   return (
     <Marker
-      ref={(instance) => registerRef(church.id, instance)}
-      position={positionForZoom(church, zoom)}
-      icon={icon}
+      position={[church.latitude, church.longitude]}
+      icon={MARKER_ICON}
+      eventHandlers={{ click: () => onSelect(church) }}
     >
       <Tooltip
-        key={showLabel ? 'label' : 'hover'}
-        permanent={showLabel}
-        direction="bottom"
-        offset={[0, -Math.round(size * 0.28)]}
+        permanent
+        interactive
+        direction="top"
+        offset={labelOffset(church)}
         opacity={1}
         className="church-marker-tooltip"
+        eventHandlers={{ click: () => onSelect(church) }}
       >
         {church.name}
       </Tooltip>
@@ -199,83 +158,34 @@ function ChurchMarker({ church, zoom, showLabel, registerRef }) {
   )
 }
 
-function ZoomScaledMarkers({ churches }) {
-  const map = useMap()
-  const [zoom, setZoom] = useState(map.getZoom())
-  const frameRef = useRef(null)
-  const markerRefs = useRef(new Map())
-
-  function registerRef(churchId, instance) {
-    if (instance) {
-      markerRefs.current.set(churchId, instance)
-    } else {
-      markerRefs.current.delete(churchId)
-    }
-  }
-
-  // Applies the current zoom's scale directly to each marker's photo
-  // element — no React re-render, no icon recreation, just a style
-  // mutation the browser can composite on the GPU.
-  function applyScale(currentZoom) {
-    const scale = sizeForZoom(currentZoom) / MAX_MARKER_SIZE
-    markerRefs.current.forEach((marker) => {
-      const el = marker.getElement?.()
-      const photo = el?.querySelector('.church-marker__photo')
-      if (photo) {
-        photo.style.transform = `scale(${scale})`
-      }
-    })
-  }
-
-  // Coalesces however many 'zoom' events fire within a single frame
-  // (can be more than one during a fast scroll) into one scale update
-  // and, separately, one React state update — instead of doing either
-  // once per raw event.
-  function scheduleZoomUpdate() {
-    if (frameRef.current) return
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null
-      const z = map.getZoom()
-      applyScale(z)
-      setZoom(z)
-    })
-  }
-
-  useMapEvents({
-    zoomanim: (e) => {
-      applyScale(e.zoom)
-      setZoom(e.zoom)
-    },
-    zoom: scheduleZoomUpdate,
-    zoomend: () => {
-      const z = map.getZoom()
-      applyScale(z)
-      setZoom(z)
-    },
-  })
-
-  // Newly created markers (churches load asynchronously from Supabase,
-  // so refs appear after mount) start at full size until scaled —
-  // apply the current zoom's scale to them immediately.
-  useEffect(() => {
-    applyScale(map.getZoom())
-  }, [churches, map])
-
-  const showLabel = zoom >= LABEL_MIN_ZOOM
-
+// Placeholder card shown when a church is selected. Structure and
+// behavior (open on select, close button, click-outside) are final —
+// the visual design of the card itself is a later pass.
+function ChurchCard({ church, onClose }) {
   return (
-    <>
-      {churches.map((church) => (
-        <ChurchMarker
-          key={church.id}
-          church={church}
-          zoom={zoom}
-          showLabel={showLabel}
-          registerRef={registerRef}
-        />
-      ))}
-    </>
+    <div className="church-card-overlay" onClick={onClose}>
+      <div className="church-card-wrap" onClick={(e) => e.stopPropagation()}>
+        {church.icon_url && (
+          <img className="church-card__photo" src={church.icon_url} alt={church.name} />
+        )}
+        <div className="church-card">
+          <button className="church-card__close" onClick={onClose} aria-label="Close">
+            &times;
+          </button>
+          <h2>{church.name}</h2>
+          {church.address && <p>{church.address}</p>}
+        </div>
+      </div>
+    </div>
   )
+}
+
+// The two CARTO basemaps this toggle switches between. Add more
+// entries here (and a corresponding button state) if you want to
+// offer a third option later, e.g. Voyager.
+const TILE_URLS = {
+  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
 }
 
 // Fallback center used only until churches load and fitBounds takes over.
@@ -283,6 +193,8 @@ const DES_MOINES_CENTER = [41.5868, -93.625]
 
 export default function ChurchMap() {
   const [churches, setChurches] = useState([])
+  const [selectedChurch, setSelectedChurch] = useState(null)
+  const [theme, setTheme] = useState('light')
 
   useEffect(() => {
     async function loadChurches() {
@@ -295,25 +207,42 @@ export default function ChurchMap() {
   }, [])
 
   return (
-    <MapContainer
-      center={DES_MOINES_CENTER}
-      zoom={11}
-      scrollWheelZoom={false}
-      zoomSnap={0}
-      zoomDelta={0.5}
-      wheelPxPerZoomLevel={100}
-      wheelDebounceTime={250}
-      className="church-map"
-    >
+    // data-theme drives the light/dark CSS overrides in styles.css for
+    // the marker dot, label pill, card, and toggle button itself.
+    <div className="church-map-shell" data-theme={theme}>
+      <button
+        type="button"
+        className="church-theme-toggle"
+        onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+      >
+        {theme === 'light' ? 'Dark map' : 'Light map'}
+      </button>
+      <MapContainer
+        center={DES_MOINES_CENTER}
+        zoom={11}
+        scrollWheelZoom={false}
+        zoomSnap={0}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={100}
+        wheelDebounceTime={250}
+        className="church-map"
+      >
         <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={TILE_URLS[theme]}
+          subdomains="abcd"
         />
         <FitToChurches churches={churches} />
         <InvalidateSizeOnReady />
         <ScrollToZoom />
-        <ZoomScaledMarkers churches={churches} />
-    </MapContainer>
+        <SelectionZoom selectedChurch={selectedChurch} />
+        {churches.map((church) => (
+          <ChurchMarker key={church.id} church={church} onSelect={setSelectedChurch} />
+        ))}
+      </MapContainer>
+      {selectedChurch && (
+        <ChurchCard church={selectedChurch} onClose={() => setSelectedChurch(null)} />
+      )}
+    </div>
   )
 }
