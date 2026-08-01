@@ -73,12 +73,15 @@ body {
 .church-marker-icon {
   background: none;
   border: none;
+  pointer-events: none;
 }
 
 .church-marker__photo {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  pointer-events: auto;
+  will-change: transform;
 }
 
 .church-marker__photo img {
