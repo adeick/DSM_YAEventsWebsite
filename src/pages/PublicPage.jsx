@@ -15,10 +15,6 @@ export default function PublicPage() {
   // styles.css — this state only has a visible effect below 860px).
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  useEffect(() => {
-    document.title = 'Daily Mass Des Moines'
-  }, [])
-
   return (
     <div className="app" data-theme={theme}>
       <header className="app__header">

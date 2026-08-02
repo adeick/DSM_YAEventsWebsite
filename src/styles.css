@@ -49,6 +49,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
   background: var(--paper);
   color: var(--ink);
 }
@@ -68,7 +69,7 @@ body {
 .app__header h1 {
   margin: 0 0 4px;
   font-family: 'Trajan Pro', 'Cinzel', Georgia, serif;
-  font-size: 22px;
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -308,21 +309,25 @@ body {
 }
 
 /* Transparent-background church image, floated above the card and
-   overlapping its top edge rather than living inside the box. Fixed
-   height + auto width (rather than a fixed square) so the image
-   keeps its real aspect ratio — a wide building photo and a narrow
-   one both display at their true proportions instead of being
-   squeezed into the same box. The height cap is intentionally
-   tighter than the width cap so a tall narrow church doesn't dwarf a
-   wide one the way an equal box would. */
+   overlapping its top edge rather than living inside the box.
+   `bottom` anchors the image's bottom edge at a FIXED distance below
+   the card's top, regardless of the image's own rendered height —
+   unlike the previous top+transform approach, where the overlap
+   scaled with each image's height and varied per photo. max-height +
+   max-width (both caps, neither forced) let the browser pick
+   whichever constraint binds first: tall narrow churches reach the
+   300px height cap and extend up near the header, short wide ones
+   get capped by width instead and end up shorter — but every image's
+   bottom edge lines up at the same fixed overlap point either way. */
 .church-card__photo {
   position: absolute;
-  top: 0;
+  bottom: calc(100% - 35px);
   left: 50%;
-  transform: translate(-50%, -80%);
-  height: 300px;
-  width: auto;
+  transform: translateX(-50%);
+  max-height: 300px;
   max-width: 95%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.4));
   pointer-events: none;
@@ -335,7 +340,7 @@ body {
   max-height: 100%;
   overflow-y: auto;
   padding: 20px;
-  padding-top: 60px;
+  padding-top: 40px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -362,11 +367,76 @@ body {
   color: var(--ink);
 }
 
-.church-card p {
+.church-card__address {
+  display: block;
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
   text-align: center;
+  text-decoration: none;
+}
+
+.church-card__address:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.church-card__website {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.church-card__website:hover {
+  text-decoration: underline;
+}
+
+.church-card__schedule {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.church-card__day-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 15px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 16px;
+}
+
+.church-card__day-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.church-card__day-times {
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.church-card__footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.church-card__footer a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.church-card__footer a:hover {
+  text-decoration: underline;
 }
 
 
@@ -631,7 +701,6 @@ body {
   .app__main {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
-    overflow: hidden;
   }
 
   .app__header {

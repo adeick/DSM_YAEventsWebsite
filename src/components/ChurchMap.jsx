@@ -159,9 +159,38 @@ function ChurchMarker({ church, onSelect }) {
   )
 }
 
+// Order matches DAY_LABELS' indices to whatever day_of_week convention
+// the mass_times table ends up using (0 = Sunday, matching JS
+// Date.getDay()) — see the architecture discussion in chat.
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+// iPadOS reports navigator.platform as 'MacIntel' just like a real Mac
+// — maxTouchPoints is what actually distinguishes the two, since a
+// Mac (even one with a touchscreen-less trackpad) reports 0.
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
+// Apple Maps only makes sense to hand someone already on an iOS
+// device — everyone else (desktop of any OS, Android) gets Google
+// Maps, which opens its native app on Android automatically and falls
+// back to the website everywhere else.
+function directionsUrl(address) {
+  const query = encodeURIComponent(address)
+  return isIOSDevice()
+    ? `https://maps.apple.com/?daddr=${query}`
+    : `https://www.google.com/maps/dir/?api=1&destination=${query}`
+}
+
 // Placeholder card shown when a church is selected. Structure and
 // behavior (open on select, close button, click-outside) are final —
-// the visual design of the card itself is a later pass.
+// the visual design of the card itself is a later pass. The schedule
+// rows are static placeholders for now — wiring them to mass_times in
+// Supabase comes after the UX pass.
 function ChurchCard({ church, onClose }) {
   return (
     <div className="church-card-overlay" onClick={onClose}>
@@ -174,7 +203,46 @@ function ChurchCard({ church, onClose }) {
             &times;
           </button>
           <h2>{church.name}</h2>
-          {church.address && <p>{church.address}</p>}
+          {church.address && (
+            <a
+              className="church-card__address"
+              href={directionsUrl(church.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {church.address}
+            </a>
+          )}
+          {church.website_url && (
+            <a
+              className="church-card__website"
+              href={church.website_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Visit website
+            </a>
+          )}
+
+          <div className="church-card__schedule">
+            {DAY_LABELS.map((day) => (
+              <div className="church-card__day-row" key={day}>
+                <span className="church-card__day-label">{day}</span>
+                <span className="church-card__day-times">—</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="church-card__footer">
+            Updated on — from{' '}
+            <a
+              href="https://masstimes.org/map?lat=41.589&lng=-93.62&SearchQueryTerm=Des%20Moines,%20Iowa"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              MassTimes.org
+            </a>
+          </div>
         </div>
       </div>
     </div>
