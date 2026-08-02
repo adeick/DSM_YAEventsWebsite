@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '../supabaseClient'
@@ -162,7 +163,12 @@ function ChurchMarker({ church, onSelect }) {
 // Order matches DAY_LABELS' indices to whatever day_of_week convention
 // the mass_times table ends up using (0 = Sunday, matching JS
 // Date.getDay()) — see the architecture discussion in chat.
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+// Displayed Monday-first with Sunday at the bottom. DAY_INDEXES maps
+// each position here to its actual day_of_week value in the database
+// (0 = Sunday, matching JS's Date.getDay()) — the display order and
+// the storage order are intentionally different.
+const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const DAY_INDEXES = [1, 2, 3, 4, 5, 6, 0]
 
 // iPadOS reports navigator.platform as 'MacIntel' just like a real Mac
 // — maxTouchPoints is what actually distinguishes the two, since a
@@ -223,28 +229,42 @@ function formatMonthYear(dateStr) {
 // keyed by day_of_week (0 = Sunday, matching DAY_LABELS and JS's
 // Date.getDay()) to an array of already-formatted time strings.
 function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
-  // Tracks which single time chip's note popover is toggled open via
-  // click (hover shows/hides independently, via CSS, regardless of
-  // this) — click support matters on touch devices, which have no
-  // hover state at all.
-  const [openNoteId, setOpenNoteId] = useState(null)
+  // The open note's id/text plus the viewport position to render its
+  // popover at, computed from the triggering element at the moment
+  // it opens. Visibility is driven entirely by this state now (click
+  // toggles it, hover sets/clears it via JS) rather than CSS :hover —
+  // touch devices apply :hover on tap and don't reliably clear it on
+  // a second tap, which was preventing the popover from closing.
+  const [openNote, setOpenNote] = useState(null)
+
+  function toggleNote(entry, wrapEl) {
+    if (!entry.notes) return
+    setOpenNote((current) => {
+      if (current?.id === entry.id) return null
+      const rect = wrapEl.getBoundingClientRect()
+      // Viewport coordinates, since the popover is portaled to
+      // document.body — position is independent of any scrolled
+      // ancestor, including the card's own overflow-y: auto.
+      return { id: entry.id, text: entry.notes, top: rect.top, left: rect.left + rect.width / 2 }
+    })
+  }
 
   // Closes the popover on a click anywhere outside a chip. Only
   // attached while one is actually open, and uses mousedown (fires
   // before the chip's own onClick) so clicking a different chip still
   // switches which note is open rather than fighting this handler.
   useEffect(() => {
-    if (openNoteId === null) return
+    if (!openNote) return
 
     function handleOutsideClick(e) {
       if (!e.target.closest('.church-card__time-chip-wrap')) {
-        setOpenNoteId(null)
+        setOpenNote(null)
       }
     }
 
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [openNoteId])
+  }, [openNote])
 
   return (
     <div className="church-card-overlay" onClick={onClose}>
@@ -279,15 +299,32 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
           )}
 
           <div className="church-card__schedule">
-            {DAY_LABELS.map((day, dayIndex) => {
-              const times = schedule?.[dayIndex]
+            {DAY_LABELS.map((day, position) => {
+              const times = schedule?.[DAY_INDEXES[position]]
               return (
                 <div className="church-card__day-row" key={day}>
                   <span className="church-card__day-label">{day}</span>
                   <span className="church-card__day-times">
                     {times && times.length
                       ? times.map((entry) => (
-                          <span className="church-card__time-chip-wrap" key={entry.id}>
+                          <span
+                            className="church-card__time-chip-wrap"
+                            key={entry.id}
+                            onMouseEnter={(e) => {
+                              if (!entry.notes) return
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setOpenNote({
+                                id: entry.id,
+                                text: entry.notes,
+                                top: rect.top,
+                                left: rect.left + rect.width / 2,
+                              })
+                            }}
+                            onMouseLeave={() =>
+                              setOpenNote((current) => (current?.id === entry.id ? null : current))
+                            }
+                            onClick={(e) => toggleNote(entry, e.currentTarget)}
+                          >
                             <button
                               type="button"
                               className={
@@ -296,27 +333,10 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
                                   ? ' church-card__time-chip--accent'
                                   : '')
                               }
-                              onClick={() =>
-                                entry.notes &&
-                                setOpenNoteId((id) => (id === entry.id ? null : entry.id))
-                              }
                             >
                               {entry.text}
                               {entry.notes ? '*' : ''}
                             </button>
-                            {entry.notes && (
-                              <span
-                                role="tooltip"
-                                className={
-                                  'church-card__time-note' +
-                                  (openNoteId === entry.id
-                                    ? ' church-card__time-note--open'
-                                    : '')
-                                }
-                              >
-                                {entry.notes}
-                              </span>
-                            )}
                           </span>
                         ))
                       : '—'}
@@ -327,7 +347,7 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
           </div>
 
           <div className="church-card__footer">
-            Updated on {updatedAtLabel || '—'} from{' '}
+            Updated {updatedAtLabel || '—'} from{' '}
             <a
               href="https://masstimes.org/map?lat=41.589&lng=-93.62&SearchQueryTerm=Des%20Moines,%20Iowa"
               target="_blank"
@@ -338,6 +358,17 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
           </div>
         </div>
       </div>
+      {openNote &&
+        createPortal(
+          <div
+            role="tooltip"
+            className="church-card__time-note"
+            style={{ top: openNote.top, left: openNote.left }}
+          >
+            {openNote.text}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

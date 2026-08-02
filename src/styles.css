@@ -324,7 +324,7 @@ body {
   bottom: calc(100% - 35px);
   left: 50%;
   transform: translateX(-50%);
-  max-height: 300px;
+  max-height: 250px;
   max-width: 95%;
   width: auto;
   height: auto;
@@ -415,10 +415,6 @@ body {
   font-size: 16px;
 }
 
-.church-card__day-row:last-child {
-  border-bottom: none;
-}
-
 .church-card__day-label {
   font-weight: 600;
   color: var(--ink);
@@ -456,15 +452,16 @@ body {
   border-color: var(--accent);
 }
 
-/* Only rendered at all when a chip has a note, so this selector
-   never affects note-less chips. Shown on hover via CSS, and on
-   click via the --open modifier class (React-controlled) — the two
-   are independent, so touch devices without hover still work. */
+/* Portaled into document.body (see ChurchCard), so this is positioned
+   in fixed/viewport coordinates rather than relative to the chip —
+   that's what lets it escape the card's own overflow-y: auto clipping
+   instead of getting cut off near the scroll edges. `top`/`left` come
+   from the triggering chip's own getBoundingClientRect() at the
+   moment it opens. Only ever rendered in the DOM while open, so no
+   opacity/visibility toggling is needed here. */
 .church-card__time-note {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
   width: max-content;
   max-width: 220px;
   padding: 8px 10px;
@@ -475,24 +472,16 @@ body {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  opacity: 0;
-  visibility: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   pointer-events: none;
-  transition: opacity 0.15s ease;
-  z-index: 5;
-}
-
-.church-card__time-chip-wrap:hover .church-card__time-note,
-.church-card__time-note--open {
-  opacity: 1;
-  visibility: visible;
+  /* Above the card overlay (1000/1001) and the map (50) — this is a
+     sibling of the whole app now, courtesy of the portal. */
+  z-index: 2000;
 }
 
 .church-card__footer {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--ink-soft);
   text-align: center;
