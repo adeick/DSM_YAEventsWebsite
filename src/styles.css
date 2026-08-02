@@ -825,6 +825,15 @@ body {
     right: 12px;
   }
 
+  /* Guaranteed on mobile width regardless of the max-height query
+     below — mobile browsers' address bar can shrink the actual
+     visible viewport without reliably updating what a max-height
+     query sees, so this can't be left to that alone. */
+  .church-card__day-row {
+    padding: 8px 4px;
+    font-size: 14px;
+  }
+
   /* Always in the layout (unlike display:none, transform can
      animate), just pushed fully below the visible area and
      unclickable until opened. */
