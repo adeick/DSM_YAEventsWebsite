@@ -297,6 +297,11 @@ body {
   padding-top: 8vh;
   background: var(--modal-backdrop);
   z-index: 1000;
+  animation: church-card-overlay-in 0.18s ease-out;
+}
+
+.church-card-overlay--closing {
+  animation: church-card-overlay-out 0.18s ease-in forwards;
 }
 
 /* Wraps the card and its overlapping image together so the image can
@@ -306,6 +311,50 @@ body {
   position: relative;
   width: min(360px, 90%);
   max-height: 80%;
+  animation: church-card-in 0.18s ease-out;
+}
+
+.church-card-wrap--closing {
+  animation: church-card-fall-out 0.18s ease-in forwards;
+}
+
+@keyframes church-card-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes church-card-overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes church-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes church-card-fall-out {
+  to {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+/* Users who've asked their OS/browser to minimize motion get an
+   instant show/hide instead — the JS unmount timer (180ms, matching
+   the animation duration above) still applies either way, so this
+   just removes the visual motion, not the brief delay. */
+@media (prefers-reduced-motion: reduce) {
+  .church-card-overlay,
+  .church-card-overlay--closing,
+  .church-card-wrap,
+  .church-card-wrap--closing {
+    animation: none;
+  }
 }
 
 /* Transparent-background church image, floated above the card and
@@ -799,5 +848,52 @@ body {
      into the map's limited vertical space at this width. */
   .leaflet-control-zoom {
     display: none;
+  }
+}
+
+/* Height-based rather than width-based — a short window (a small
+   laptop, a landscape phone, a browser split-screen) needs this on
+   BOTH mobile and desktop layouts, since the problem isn't screen
+   width, it's vertical room. Only padding-top/bottom on the header
+   (not the shorthand padding) so this doesn't clobber the
+   width-based mobile query's right-padding reserved for the
+   hamburger button. Pulls spacing back toward what the card/header
+   looked like before several rounds of "make it bigger" requests,
+   specifically so the card can fit within a constrained viewport
+   height without scrolling or getting clipped. */
+@media (max-height: 700px) {
+  .app__header {
+    padding-top: 14px;
+    padding-bottom: 10px;
+  }
+
+  .app__header h1 {
+    font-size: 24px;
+  }
+
+  .church-card-overlay {
+    padding-top: 3vh;
+  }
+
+  .church-card {
+    min-height: 0;
+  }
+
+  .church-card__photo {
+    max-height: 170px;
+  }
+
+  .church-card__schedule {
+    margin-top: 10px;
+  }
+
+  .church-card__day-row {
+    padding: 6px 4px;
+    font-size: 13px;
+  }
+
+  .church-card__footer {
+    margin-top: 10px;
+    padding-top: 8px;
   }
 }

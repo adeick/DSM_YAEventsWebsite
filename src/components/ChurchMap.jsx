@@ -266,14 +266,39 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [openNote])
 
+  // The exit animation needs a moment to actually play before the
+  // component unmounts — React removes it from the DOM the instant
+  // `selectedChurch` clears in the parent, with no way to wait for a
+  // CSS animation to finish first. So closing goes through a brief
+  // local "closing" state (triggers the CSS fall-out animation below)
+  // before calling the real onClose. 180ms matches the animation
+  // duration in styles.css — keep the two in sync if either changes.
+  const [isClosing, setIsClosing] = useState(false)
+
+  function handleClose() {
+    setIsClosing(true)
+  }
+
+  useEffect(() => {
+    if (!isClosing) return
+    const timer = setTimeout(onClose, 180)
+    return () => clearTimeout(timer)
+  }, [isClosing, onClose])
+
   return (
-    <div className="church-card-overlay" onClick={onClose}>
-      <div className="church-card-wrap" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={'church-card-overlay' + (isClosing ? ' church-card-overlay--closing' : '')}
+      onClick={handleClose}
+    >
+      <div
+        className={'church-card-wrap' + (isClosing ? ' church-card-wrap--closing' : '')}
+        onClick={(e) => e.stopPropagation()}
+      >
         {church.icon_url && (
           <img className="church-card__photo" src={church.icon_url} alt={church.name} />
         )}
         <div className="church-card">
-          <button className="church-card__close" onClick={onClose} aria-label="Close">
+          <button className="church-card__close" onClick={handleClose} aria-label="Close">
             &times;
           </button>
           <h2>{church.name}</h2>
@@ -402,6 +427,20 @@ export default function ChurchMap({ theme, onToggleTheme }) {
         .or('ignore.eq.false,ignore.is.null')
       if (!error && data) {
         setChurches(data)
+
+        // Kick off a background download for every church photo now,
+        // while the map is idle, instead of only starting the request
+        // once a card is actually opened. This doesn't reduce how much
+        // ever gets downloaded — the real fix for that is serving
+        // properly-sized images in the first place (see chat) — it just
+        // moves the wait earlier so it's (ideally) already done by the
+        // time someone clicks a marker. The Image object is discarded;
+        // its only job is to trigger the browser's own cache.
+        for (const church of data) {
+          if (church.icon_url) {
+            new Image().src = church.icon_url
+          }
+        }
       }
     }
     loadChurches()
