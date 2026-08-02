@@ -186,12 +186,66 @@ function directionsUrl(address) {
     : `https://www.google.com/maps/dir/?api=1&destination=${query}`
 }
 
+// mass_times.time is stored as already-formatted text (e.g. "2:30 PM"),
+// so nothing needs reformatting for display — but plain string sorting
+// breaks across AM/PM ("9:00 AM" would sort after "10:00 AM", and PM
+// times wouldn't sort after AM at all). This only extracts a
+// minutes-since-midnight value to sort by; the original text is what
+// actually gets shown.
+function parseTimeToMinutes(timeStr) {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i)
+  if (!match) return null
+  const [, hoursStr, minutesStr, period] = match
+  let hours = Number(hoursStr) % 12
+  if (period.toUpperCase() === 'PM') hours += 12
+  return hours * 60 + Number(minutesStr)
+}
+
+// "2026-01-15" -> "January 2026". Parses year/month manually rather
+// than via `new Date(dateStr)` — that parses date-only strings as UTC
+// midnight, which can roll back a day (and, on the 1st of a month,
+// the displayed month) once converted to a timezone west of UTC.
+// Since only month/year is ever shown, the day is irrelevant and this
+// sidesteps the bug entirely.
+function formatMonthYear(dateStr) {
+  if (!dateStr) return null
+  const [year, month] = dateStr.split('-').map(Number)
+  if (!year || !month) return null
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 // Placeholder card shown when a church is selected. Structure and
 // behavior (open on select, close button, click-outside) are final —
-// the visual design of the card itself is a later pass. The schedule
-// rows are static placeholders for now — wiring them to mass_times in
-// Supabase comes after the UX pass.
-function ChurchCard({ church, onClose }) {
+// the visual design of the card itself is a later pass. `schedule` is
+// keyed by day_of_week (0 = Sunday, matching DAY_LABELS and JS's
+// Date.getDay()) to an array of already-formatted time strings.
+function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
+  // Tracks which single time chip's note popover is toggled open via
+  // click (hover shows/hides independently, via CSS, regardless of
+  // this) — click support matters on touch devices, which have no
+  // hover state at all.
+  const [openNoteId, setOpenNoteId] = useState(null)
+
+  // Closes the popover on a click anywhere outside a chip. Only
+  // attached while one is actually open, and uses mousedown (fires
+  // before the chip's own onClick) so clicking a different chip still
+  // switches which note is open rather than fighting this handler.
+  useEffect(() => {
+    if (openNoteId === null) return
+
+    function handleOutsideClick(e) {
+      if (!e.target.closest('.church-card__time-chip-wrap')) {
+        setOpenNoteId(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [openNoteId])
+
   return (
     <div className="church-card-overlay" onClick={onClose}>
       <div className="church-card-wrap" onClick={(e) => e.stopPropagation()}>
@@ -225,16 +279,55 @@ function ChurchCard({ church, onClose }) {
           )}
 
           <div className="church-card__schedule">
-            {DAY_LABELS.map((day) => (
-              <div className="church-card__day-row" key={day}>
-                <span className="church-card__day-label">{day}</span>
-                <span className="church-card__day-times">—</span>
-              </div>
-            ))}
+            {DAY_LABELS.map((day, dayIndex) => {
+              const times = schedule?.[dayIndex]
+              return (
+                <div className="church-card__day-row" key={day}>
+                  <span className="church-card__day-label">{day}</span>
+                  <span className="church-card__day-times">
+                    {times && times.length
+                      ? times.map((entry) => (
+                          <span className="church-card__time-chip-wrap" key={entry.id}>
+                            <button
+                              type="button"
+                              className={
+                                'church-card__time-chip' +
+                                (entry.sundayObligation
+                                  ? ' church-card__time-chip--accent'
+                                  : '')
+                              }
+                              onClick={() =>
+                                entry.notes &&
+                                setOpenNoteId((id) => (id === entry.id ? null : entry.id))
+                              }
+                            >
+                              {entry.text}
+                              {entry.notes ? '*' : ''}
+                            </button>
+                            {entry.notes && (
+                              <span
+                                role="tooltip"
+                                className={
+                                  'church-card__time-note' +
+                                  (openNoteId === entry.id
+                                    ? ' church-card__time-note--open'
+                                    : '')
+                                }
+                              >
+                                {entry.notes}
+                              </span>
+                            )}
+                          </span>
+                        ))
+                      : '—'}
+                  </span>
+                </div>
+              )
+            })}
           </div>
 
           <div className="church-card__footer">
-            Updated on — from{' '}
+            Updated on {updatedAtLabel || '—'} from{' '}
             <a
               href="https://masstimes.org/map?lat=41.589&lng=-93.62&SearchQueryTerm=Des%20Moines,%20Iowa"
               target="_blank"
@@ -263,15 +356,75 @@ const DES_MOINES_CENTER = [41.5868, -93.625]
 export default function ChurchMap({ theme, onToggleTheme }) {
   const [churches, setChurches] = useState([])
   const [selectedChurch, setSelectedChurch] = useState(null)
+  const [massTimesByChurch, setMassTimesByChurch] = useState({})
+  const [updatedAtLabel, setUpdatedAtLabel] = useState(null)
 
   useEffect(() => {
     async function loadChurches() {
-      const { data, error } = await supabase.from('churches').select('*')
+      // Rows with incomplete data are flagged ignore=true rather than
+      // deleted — excluded here so they never reach the map. Also
+      // matches null just in case any older rows predate the column
+      // and were never explicitly set to false.
+      const { data, error } = await supabase
+        .from('churches')
+        .select('*')
+        .or('ignore.eq.false,ignore.is.null')
       if (!error && data) {
         setChurches(data)
       }
     }
     loadChurches()
+  }, [])
+
+  useEffect(() => {
+    // Small enough dataset (diocese-scale) to fetch everything once
+    // and group client-side, rather than re-querying per selection.
+    async function loadMassTimes() {
+      const { data, error } = await supabase
+        .from('mass_times')
+        .select('id, church_id, day_of_week, time, notes, sunday_obligation')
+      if (error || !data) return
+
+      const grouped = {}
+      for (const row of data) {
+        grouped[row.church_id] ??= {}
+        grouped[row.church_id][row.day_of_week] ??= []
+        grouped[row.church_id][row.day_of_week].push({
+          id: row.id,
+          text: row.time,
+          notes: row.notes,
+          sundayObligation: row.sunday_obligation,
+        })
+      }
+      // Sort chronologically within each day using the parsed minutes
+      // value — the stored text itself is already display-ready, so it's
+      // shown as-is rather than reformatted.
+      for (const churchTimes of Object.values(grouped)) {
+        for (const day of Object.keys(churchTimes)) {
+          churchTimes[day].sort(
+            (a, b) => (parseTimeToMinutes(a.text) ?? 0) - (parseTimeToMinutes(b.text) ?? 0)
+          )
+        }
+      }
+      setMassTimesByChurch(grouped)
+    }
+    loadMassTimes()
+  }, [])
+
+  useEffect(() => {
+    // Site-wide, not per-church — one row your scraper script upserts
+    // after each run (see the chat discussion for the table shape).
+    async function loadUpdatedAt() {
+      const { data, error } = await supabase
+        .from('site_metadata')
+        .select('value')
+        .eq('key', 'mass_times_updated_at')
+        .single()
+      if (!error && data) {
+        setUpdatedAtLabel(formatMonthYear(data.value))
+      }
+    }
+    loadUpdatedAt()
   }, [])
 
   return (
@@ -307,7 +460,12 @@ export default function ChurchMap({ theme, onToggleTheme }) {
         ))}
       </MapContainer>
       {selectedChurch && (
-        <ChurchCard church={selectedChurch} onClose={() => setSelectedChurch(null)} />
+        <ChurchCard
+          church={selectedChurch}
+          onClose={() => setSelectedChurch(null)}
+          schedule={massTimesByChurch[selectedChurch.id]}
+          updatedAtLabel={updatedAtLabel}
+        />
       )}
     </div>
   )
