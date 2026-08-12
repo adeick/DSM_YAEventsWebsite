@@ -1,4 +1,4 @@
-export default function EventCard({ event }) {
+export default function EventCard({ event, onSelect }) {
   const date = new Date(event.event_date)
   const dateLabel = date.toLocaleDateString(undefined, {
     weekday: 'short',
@@ -11,7 +11,19 @@ export default function EventCard({ event }) {
   })
 
   return (
-    <article className="event-card">
+    <article
+      className="event-card"
+      onClick={() => onSelect?.(event)}
+      role={onSelect ? 'button' : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!onSelect) return
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect(event)
+        }
+      }}
+    >
       <div className="event-card__date">
         <span className="event-card__date-day">{date.getDate()}</span>
         <span className="event-card__date-month">
@@ -22,11 +34,10 @@ export default function EventCard({ event }) {
         <h3 className="event-card__title">{event.title}</h3>
         <p className="event-card__meta">
           {dateLabel} · {timeLabel}
-          {event.location ? ` · ${event.location}` : ''}
+          {event.location_name || event.address
+            ? ` · ${event.location_name || event.address}`
+            : ''}
         </p>
-        {event.description && (
-          <p className="event-card__description">{event.description}</p>
-        )}
       </div>
     </article>
   )

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '../supabaseClient'
+import { directionsUrl } from '../utils/directions'
+import { useClosingAnimation } from '../hooks/useClosingAnimation'
 
 // Every church gets the same small marker — no photos on the map
 // itself anymore, and no clustering. The church's name is shown next
@@ -12,6 +14,26 @@ const MARKER_ICON = L.divIcon({
   html: '<div class="church-marker__dot"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
+})
+
+// Distinct pin shape (rather than a plain dot) for the selected
+// event's location — the shape difference alone signals "this is a
+// different kind of marker" from the church dots, on top of it only
+// ever appearing one at a time for whichever event is currently open.
+// Colored via CSS with var(--accent)/var(--card), so it follows the
+// light/dark theme the same way everything else on the map does.
+const EVENT_MARKER_ICON = L.divIcon({
+  className: 'event-marker-icon',
+  html: `
+    <svg class="event-marker__pin" width="26" height="34" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20C24 5.4 18.6 0 12 0z" />
+      <circle class="event-marker__pin-dot" cx="12" cy="12" r="4.5" />
+    </svg>
+  `,
+  iconSize: [26, 34],
+  // Anchored at the pin's bottom tip, not its center — that's the
+  // point that should actually sit on the coordinate.
+  iconAnchor: [13, 34],
 })
 
 // Labels sit directly above the marker by default. Manual pixel
@@ -108,30 +130,32 @@ function InvalidateSizeOnReady() {
   return null
 }
 
-// Zoom level to fly to when a church is selected.
+// Zoom level to fly to when a church or event is selected.
 const SELECTED_ZOOM = 16
 
 // Drives the "zoom in on select, zoom back out on close" behavior.
-// Captures the view (center + zoom) that was active right before a
-// church was selected, and restores exactly that view when the
+// Captures the view (center + zoom) that was active right before
+// something was selected, and restores exactly that view when the
 // selection is cleared — rather than snapping back to a fixed default.
-function SelectionZoom({ selectedChurch }) {
+// `target` is generic (any {latitude, longitude} object) rather than
+// church-specific, since the map now also flies to a selected event.
+function SelectionZoom({ target }) {
   const map = useMap()
   const previousView = useRef(null)
 
   useEffect(() => {
-    if (selectedChurch) {
+    if (target) {
       // Only capture "previous view" once per selection — not on
-      // every re-render while a church stays selected.
+      // every re-render while something stays selected.
       if (!previousView.current) {
         previousView.current = { center: map.getCenter(), zoom: map.getZoom() }
       }
-      map.flyTo([selectedChurch.latitude, selectedChurch.longitude], SELECTED_ZOOM)
+      map.flyTo([target.latitude, target.longitude], SELECTED_ZOOM)
     } else if (previousView.current) {
       map.flyTo(previousView.current.center, previousView.current.zoom)
       previousView.current = null
     }
-  }, [selectedChurch, map])
+  }, [target, map])
 
   return null
 }
@@ -169,28 +193,6 @@ function ChurchMarker({ church, onSelect }) {
 // the storage order are intentionally different.
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const DAY_INDEXES = [1, 2, 3, 4, 5, 6, 0]
-
-// iPadOS reports navigator.platform as 'MacIntel' just like a real Mac
-// — maxTouchPoints is what actually distinguishes the two, since a
-// Mac (even one with a touchscreen-less trackpad) reports 0.
-function isIOSDevice() {
-  if (typeof navigator === 'undefined') return false
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  )
-}
-
-// Apple Maps only makes sense to hand someone already on an iOS
-// device — everyone else (desktop of any OS, Android) gets Google
-// Maps, which opens its native app on Android automatically and falls
-// back to the website everywhere else.
-function directionsUrl(address) {
-  const query = encodeURIComponent(address)
-  return isIOSDevice()
-    ? `https://maps.apple.com/?daddr=${query}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${query}`
-}
 
 // mass_times.time is stored as already-formatted text (e.g. "2:30 PM"),
 // so nothing needs reformatting for display — but plain string sorting
@@ -266,24 +268,9 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [openNote])
 
-  // The exit animation needs a moment to actually play before the
-  // component unmounts — React removes it from the DOM the instant
-  // `selectedChurch` clears in the parent, with no way to wait for a
-  // CSS animation to finish first. So closing goes through a brief
-  // local "closing" state (triggers the CSS fall-out animation below)
-  // before calling the real onClose. 180ms matches the animation
-  // duration in styles.css — keep the two in sync if either changes.
-  const [isClosing, setIsClosing] = useState(false)
-
-  function handleClose() {
-    setIsClosing(true)
-  }
-
-  useEffect(() => {
-    if (!isClosing) return
-    const timer = setTimeout(onClose, 180)
-    return () => clearTimeout(timer)
-  }, [isClosing, onClose])
+  // 180ms matches the animation duration in styles.css — keep the two
+  // in sync if either changes.
+  const { isClosing, startClosing: handleClose } = useClosingAnimation(onClose, 180)
 
   return (
     <div
@@ -409,11 +396,23 @@ const TILE_URLS = {
 // Fallback center used only until churches load and fitBounds takes over.
 const DES_MOINES_CENTER = [41.5868, -93.625]
 
-export default function ChurchMap({ theme, onToggleTheme }) {
+export default function ChurchMap({ theme, onToggleTheme, selectedEvent }) {
   const [churches, setChurches] = useState([])
   const [selectedChurch, setSelectedChurch] = useState(null)
   const [massTimesByChurch, setMassTimesByChurch] = useState({})
   const [updatedAtLabel, setUpdatedAtLabel] = useState(null)
+
+  // Whichever the map should currently be flying to/showing a pin
+  // for. Church selection happens by clicking a marker directly on
+  // this map; event selection happens from the sidebar list — a
+  // selected church takes priority in the unlikely case both are
+  // somehow set at once. Events without geocoded coordinates (e.g.
+  // older rows from before the address confirmation step existed)
+  // are treated as having no map target rather than flying to
+  // undefined/null coordinates.
+  const eventHasCoords =
+    selectedEvent && typeof selectedEvent.latitude === 'number' && typeof selectedEvent.longitude === 'number'
+  const mapSelectionTarget = selectedChurch || (eventHasCoords ? selectedEvent : null)
 
   useEffect(() => {
     async function loadChurches() {
@@ -524,10 +523,16 @@ export default function ChurchMap({ theme, onToggleTheme }) {
         <FitToChurches churches={churches} />
         <InvalidateSizeOnReady />
         <ScrollToZoom />
-        <SelectionZoom selectedChurch={selectedChurch} />
+        <SelectionZoom target={mapSelectionTarget} />
         {churches.map((church) => (
           <ChurchMarker key={church.id} church={church} onSelect={setSelectedChurch} />
         ))}
+        {eventHasCoords && (
+          <Marker
+            position={[selectedEvent.latitude, selectedEvent.longitude]}
+            icon={EVENT_MARKER_ICON}
+          />
+        )}
       </MapContainer>
       {selectedChurch && (
         <ChurchCard

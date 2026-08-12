@@ -256,6 +256,23 @@ body {
   cursor: pointer;
 }
 
+.event-marker-icon {
+  background: none;
+  border: none;
+}
+
+.event-marker__pin {
+  fill: var(--accent);
+  stroke: var(--card);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.event-marker__pin-dot {
+  fill: var(--card);
+  stroke: none;
+}
+
 /* Leaflet's built-in tooltip, restyled to a plain minimal pill and
    stripped of its default border/shadow/arrow chrome. Always visible
    (permanent) and clickable — it doubles as the marker's label and
@@ -297,11 +314,11 @@ body {
   padding-top: 8vh;
   background: var(--modal-backdrop);
   z-index: 1000;
-  animation: church-card-overlay-in 0.18s ease-out;
+  animation: card-overlay-in 0.18s ease-out;
 }
 
 .church-card-overlay--closing {
-  animation: church-card-overlay-out 0.18s ease-in forwards;
+  animation: card-overlay-out 0.18s ease-in forwards;
 }
 
 /* Wraps the card and its overlapping image together so the image can
@@ -311,33 +328,33 @@ body {
   position: relative;
   width: min(360px, 90%);
   max-height: 80%;
-  animation: church-card-in 0.18s ease-out;
+  animation: card-fade-in-up 0.18s ease-out;
 }
 
 .church-card-wrap--closing {
-  animation: church-card-fall-out 0.18s ease-in forwards;
+  animation: card-fall-out 0.18s ease-in forwards;
 }
 
-@keyframes church-card-overlay-in {
+@keyframes card-overlay-in {
   from {
     opacity: 0;
   }
 }
 
-@keyframes church-card-overlay-out {
+@keyframes card-overlay-out {
   to {
     opacity: 0;
   }
 }
 
-@keyframes church-card-in {
+@keyframes card-fade-in-up {
   from {
     opacity: 0;
     transform: translateY(20px);
   }
 }
 
-@keyframes church-card-fall-out {
+@keyframes card-fall-out {
   to {
     opacity: 0;
     transform: translateY(24px);
@@ -352,9 +369,181 @@ body {
   .church-card-overlay,
   .church-card-overlay--closing,
   .church-card-wrap,
-  .church-card-wrap--closing {
+  .church-card-wrap--closing,
+  .event-detail-overlay,
+  .event-detail-overlay--closing,
+  .event-detail-wrap,
+  .event-detail-wrap--closing {
     animation: none;
   }
+}
+
+/* ── Event detail card ──────────────────────────────────────────
+   Shown when an event in the sidebar is clicked. Portaled to
+   document.body (see EventDetailCard) as a fixed, full-viewport
+   modal — unlike ChurchCard's overlay, which is intentionally scoped
+   to just the map area. Reuses the card-*-in/out keyframes defined
+   above for a consistent feel with the church card. */
+.event-detail-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8vh 20px;
+  background: var(--modal-backdrop);
+  z-index: 2000;
+  animation: card-overlay-in 0.18s ease-out;
+}
+
+.event-detail-overlay--closing {
+  animation: card-overlay-out 0.18s ease-in forwards;
+}
+
+.event-detail-wrap {
+  position: relative;
+  width: min(400px, 100%);
+  max-height: 100%;
+  animation: card-fade-in-up 0.18s ease-out;
+}
+
+.event-detail-wrap--closing {
+  animation: card-fall-out 0.18s ease-in forwards;
+}
+
+/* Same overlap treatment as the church card's photo — bottom edge
+   pinned at a fixed distance below the card's top regardless of the
+   image's own aspect ratio, so overlap stays consistent. */
+.event-detail__photo {
+  position: absolute;
+  bottom: calc(100% - 35px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-height: 220px;
+  max-width: 95%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.event-detail {
+  position: relative;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  padding-top: 44px;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  color: var(--ink);
+}
+
+.event-detail__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.event-detail__share {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.event-detail h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+}
+
+.event-detail__title--tight {
+  margin-bottom: 4px;
+}
+
+.event-detail__organizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-family: 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.event-detail__organizer-photo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.event-detail__address {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 12px;
+  padding: 6px 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.event-detail__address-icon {
+  flex-shrink: 0;
+}
+
+.event-detail__address:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.event-detail__datetime {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.event-detail__description {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.event-detail__description a {
+  color: var(--accent);
+}
+
+.event-detail__description a:hover {
+  text-decoration: underline;
 }
 
 /* Transparent-background church image, floated above the card and
@@ -566,6 +755,12 @@ body {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.event-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .event-card__date {
@@ -706,6 +901,7 @@ body {
 
 .login-form input,
 .event-form input,
+.event-form select,
 .event-form textarea {
   font-family: inherit;
   font-size: 14px;
@@ -716,12 +912,106 @@ body {
   background: var(--paper);
 }
 
+.description-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.description-field__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.description-field__format-button {
+  width: 28px;
+  height: 28px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.description-field__format-button:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+
+.description-field__toolbar-button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.description-field__textarea {
+  /* Auto-resize (see DescriptionField's useEffect, which sets an
+     explicit inline height from scrollHeight) needs the browser's own
+     resize handle and vertical scrollbar out of the way, or the two
+     sizing mechanisms fight each other. min-height matches the
+     starting rows={6} so there's no flash of a smaller box before the
+     first resize runs. */
+  min-height: 130px;
+  resize: none;
+  overflow-y: hidden;
+}
+
+.description-field__link-tool {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.description-field__link-tool input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.description-field__link-tool button {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  color: var(--paper);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.description-field__link-tool button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .event-form__row {
   display: flex;
   gap: 12px;
 }
 
 .event-form__row label {
+  flex: 1;
+}
+
+.event-form__date-field {
+  flex: 2;
+}
+
+.event-form__time-field {
   flex: 1;
 }
 
@@ -764,6 +1054,106 @@ body {
   color: #3d7a4d;
 }
 
+.form-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* ── Address geocoder ────────────────────────────────────────────── */
+
+.geocoder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.geocoder__lookup-button {
+  align-self: flex-start;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.geocoder__lookup-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.geocoder__status--error {
+  margin: 0;
+  font-size: 13px;
+  color: #b3402a;
+}
+
+.geocoder__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.geocoder__map {
+  width: 100%;
+  height: 180px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.geocoder__map-inner {
+  width: 100%;
+  height: 100%;
+}
+
+.geocoder__resolved {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.geocoder__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.geocoder-marker__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.geocoder__confirm-button {
+  align-self: flex-start;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  color: var(--paper);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.geocoder__confirm-button--confirmed {
+  background: #3d7a4d;
+}
+
 .admin-event-list {
   list-style: none;
   margin: 0;
@@ -783,6 +1173,11 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   font-size: 14px;
+}
+
+.admin-event-list__organizer {
+  font-size: 13px;
+  color: var(--ink-soft);
 }
 
 .admin-event-list__date {
@@ -808,6 +1203,17 @@ body {
   .app__main {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
+  }
+
+  /* Organizer/Location and Date/Hour/Minute are side-by-side on
+     desktop, but at mobile widths that squeezes each input too
+     narrow and causes overflow — stack them instead. */
+  .event-form__row {
+    flex-direction: column;
+  }
+
+  .description-field__link-tool {
+    flex-direction: column;
   }
 
   .app__header {

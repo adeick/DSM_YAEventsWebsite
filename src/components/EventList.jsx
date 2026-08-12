@@ -1,38 +1,18 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient'
 import EventCard from './EventCard'
+import EventDetailCard from './EventDetailCard'
 
-export default function EventList() {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadEvents() {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .gte('event_date', new Date().toISOString())
-        .order('event_date', { ascending: true })
-
-      if (!isMounted) return
-
-      if (error) {
-        setError(error.message)
-      } else {
-        setEvents(data)
-      }
-      setLoading(false)
-    }
-
-    loadEvents()
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
+// Purely presentational now — events, the selected one, and the
+// deep-link/URL-sync logic all live in PublicPage, since ChurchMap
+// (a sibling of this component, not a parent/child) also needs to
+// know which event is selected in order to fly to it on the map.
+export default function EventList({
+  events,
+  loading,
+  error,
+  selectedEvent,
+  onSelectEvent,
+  onCloseEvent,
+}) {
   if (loading) {
     return <p className="event-list__status">Loading events…</p>
   }
@@ -46,10 +26,13 @@ export default function EventList() {
   }
 
   return (
-    <div className="event-list">
-      {events.map((event) => (
-        <EventCard key={event.id} event={event} />
-      ))}
-    </div>
+    <>
+      <div className="event-list">
+        {events.map((event) => (
+          <EventCard key={event.id} event={event} onSelect={onSelectEvent} />
+        ))}
+      </div>
+      {selectedEvent && <EventDetailCard event={selectedEvent} onClose={onCloseEvent} />}
+    </>
   )
 }

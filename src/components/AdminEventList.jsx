@@ -38,6 +38,9 @@ export default function AdminEventList({ refreshKey }) {
         <li key={event.id}>
           <div>
             <strong>{event.title}</strong>
+            {event.organizer && (
+              <span className="admin-event-list__organizer"> — {event.organizer}</span>
+            )}
             <span className="admin-event-list__date">
               {new Date(event.event_date).toLocaleString(undefined, {
                 dateStyle: 'medium',
