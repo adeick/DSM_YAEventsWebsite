@@ -20,10 +20,16 @@
 /* Dark mode: redefining the variables above (rather than overriding
    individual components) means anything already styled with var(--ink),
    var(--card), etc. — the header, event sidebar, cards, links — goes
-   dark automatically. Scoped to .app so it only takes effect once
-   PublicPage sets data-theme="dark", and cascades to every descendant,
-   including the map (data-theme lives on .app, not on the map itself). */
-.app[data-theme='dark'] {
+   dark automatically. Scoped to body (not .app) specifically so it
+   also reaches content rendered via createPortal straight into
+   document.body — EventDetailCard, and the Mass-time note popover in
+   ChurchCard both do this. CSS variables cascade through the actual
+   DOM tree, not the React component tree, so a portaled element is a
+   sibling of .app in the DOM regardless of where it sits in JSX —
+   scoping this to .app would silently exclude anything portaled. See
+   PublicPage, which sets data-theme on document.body directly. */
+.app[data-theme='dark'],
+body[data-theme='dark'] {
   --ink: #f5f3ee;
   --ink-soft: #a8a6a0;
   --paper: #141414;
