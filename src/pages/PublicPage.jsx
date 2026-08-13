@@ -15,6 +15,18 @@ export default function PublicPage() {
   const [theme, setTheme] = useState('light')
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
 
+  // Mirrors `theme` onto document.body itself, in addition to the
+  // data-theme prop on the .app div below. Anything rendered via
+  // createPortal straight into document.body (EventDetailCard, the
+  // Mass-time note popover in ChurchCard) sits OUTSIDE .app in the
+  // actual DOM — CSS variables cascade through the real DOM tree, not
+  // the React tree, so those portaled elements can only pick up dark
+  // mode if the attribute lives on a genuine ancestor of theirs. body
+  // is the nearest one that's guaranteed to contain everything.
+  useEffect(() => {
+    document.body.dataset.theme = theme
+  }, [theme])
+
   // Sidebar is always visible on desktop; on mobile it's a hidden
   // overlay toggled by the hamburger button (see the media query in
   // styles.css — this state only has a visible effect below 860px).
@@ -85,6 +97,10 @@ export default function PublicPage() {
   function handleSelectEvent(event) {
     setSelectedEvent(event)
     window.history.pushState({}, '', `?event=${event.id}`)
+    // No-op on desktop (sidebarOpen only affects the mobile slide-out
+    // menu), but on mobile the event card would otherwise open with
+    // the hamburger menu still sitting open underneath it.
+    setSidebarOpen(false)
   }
 
   function handleCloseEvent() {
