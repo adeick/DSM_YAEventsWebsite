@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Tooltip, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '../supabaseClient'
 import { directionsUrl } from '../utils/directions'
 import { useClosingAnimation } from '../hooks/useClosingAnimation'
+import { DAY_LABELS, DAY_INDEXES, groupMassTimesByChurch } from '../utils/massSchedule'
 
 // Every church gets the same small marker — no photos on the map
 // itself anymore, and no clustering. The church's name is shown next
@@ -14,6 +15,34 @@ const MARKER_ICON = L.divIcon({
   html: '<div class="church-marker__dot"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
+})
+
+// Larger, ringed variant for churches matched by a commute search —
+// same accent color as the default dot, so it reads as "this one too"
+// rather than a different kind of place.
+const HIGHLIGHT_MARKER_ICON = L.divIcon({
+  className: 'church-marker-icon',
+  html: '<div class="church-marker__dot church-marker__dot--highlighted"></div>',
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+})
+
+// Preview pins for the commute form's home/work addresses — fixed
+// colors (not theme-driven) so they stay visually distinct from the
+// church dots (which use --accent) and from each other regardless of
+// light/dark mode.
+const HOME_MARKER_ICON = L.divIcon({
+  className: 'church-marker-icon',
+  html: '<div class="commute-pin commute-pin--home">H</div>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+})
+
+const WORK_MARKER_ICON = L.divIcon({
+  className: 'church-marker-icon',
+  html: '<div class="commute-pin commute-pin--work">W</div>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 })
 
 // Distinct pin shape (rather than a plain dot) for the selected
@@ -106,6 +135,52 @@ function FitToChurches({ churches }) {
   return null
 }
 
+// Re-fits the map to the commute route whenever a new one comes in —
+// takes over from FitToChurches so the whole route (not just whichever
+// churches happen to be near it) stays in view.
+function FitToRoute({ route }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!route || !route.length) return
+    const bounds = L.latLngBounds(route)
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 })
+    }
+  }, [map, route])
+
+  return null
+}
+
+// While the commute form is still being filled in (no route/results
+// yet), keeps whichever preview pins exist in view — otherwise a home
+// address on the far side of the metro could resolve to a pin that's
+// entirely off-screen with no indication anything happened. `active`
+// is false once results/route are showing, since FitToRoute takes
+// over framing at that point.
+function FitToCommutePins({ homeLocation, workLocation, active }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!active) return
+    const points = []
+    if (homeLocation) points.push([homeLocation.lat, homeLocation.lon])
+    if (workLocation) points.push([workLocation.lat, workLocation.lon])
+    if (!points.length) return
+
+    if (points.length === 1) {
+      map.flyTo(points[0], 14)
+    } else {
+      const bounds = L.latLngBounds(points)
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [64, 64], maxZoom: 14 })
+      }
+    }
+  }, [map, homeLocation, workLocation, active])
+
+  return null
+}
+
 // Leaflet measures its container's size once, at mount. If the
 // surrounding CSS grid hasn't finished laying out yet — or web fonts
 // are still loading and about to shift things — that initial
@@ -162,11 +237,11 @@ function SelectionZoom({ target }) {
 
 // A single marker: a small dot plus an always-visible label. Clicking
 // either one selects the church.
-function ChurchMarker({ church, onSelect }) {
+function ChurchMarker({ church, onSelect, highlighted }) {
   return (
     <Marker
       position={[church.latitude, church.longitude]}
-      icon={MARKER_ICON}
+      icon={highlighted ? HIGHLIGHT_MARKER_ICON : MARKER_ICON}
       eventHandlers={{ click: () => onSelect(church) }}
     >
       <Tooltip
@@ -182,31 +257,6 @@ function ChurchMarker({ church, onSelect }) {
       </Tooltip>
     </Marker>
   )
-}
-
-// Order matches DAY_LABELS' indices to whatever day_of_week convention
-// the mass_times table ends up using (0 = Sunday, matching JS
-// Date.getDay()) — see the architecture discussion in chat.
-// Displayed Monday-first with Sunday at the bottom. DAY_INDEXES maps
-// each position here to its actual day_of_week value in the database
-// (0 = Sunday, matching JS's Date.getDay()) — the display order and
-// the storage order are intentionally different.
-const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const DAY_INDEXES = [1, 2, 3, 4, 5, 6, 0]
-
-// mass_times.time is stored as already-formatted text (e.g. "2:30 PM"),
-// so nothing needs reformatting for display — but plain string sorting
-// breaks across AM/PM ("9:00 AM" would sort after "10:00 AM", and PM
-// times wouldn't sort after AM at all). This only extracts a
-// minutes-since-midnight value to sort by; the original text is what
-// actually gets shown.
-function parseTimeToMinutes(timeStr) {
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i)
-  if (!match) return null
-  const [, hoursStr, minutesStr, period] = match
-  let hours = Number(hoursStr) % 12
-  if (period.toUpperCase() === 'PM') hours += 12
-  return hours * 60 + Number(minutesStr)
 }
 
 // "2026-01-15" -> "January 2026". Parses year/month manually rather
@@ -396,7 +446,15 @@ const TILE_URLS = {
 // Fallback center used only until churches load and fitBounds takes over.
 const DES_MOINES_CENTER = [41.5868, -93.625]
 
-export default function ChurchMap({ theme, onToggleTheme, selectedEvent }) {
+export default function ChurchMap({
+  theme,
+  onToggleTheme,
+  selectedEvent,
+  route,
+  highlightedChurchIds,
+  homeLocation,
+  workLocation,
+}) {
   const [churches, setChurches] = useState([])
   const [selectedChurch, setSelectedChurch] = useState(null)
   const [massTimesByChurch, setMassTimesByChurch] = useState({})
@@ -454,28 +512,7 @@ export default function ChurchMap({ theme, onToggleTheme, selectedEvent }) {
         .select('id, church_id, day_of_week, time, notes, sunday_obligation')
       if (error || !data) return
 
-      const grouped = {}
-      for (const row of data) {
-        grouped[row.church_id] ??= {}
-        grouped[row.church_id][row.day_of_week] ??= []
-        grouped[row.church_id][row.day_of_week].push({
-          id: row.id,
-          text: row.time,
-          notes: row.notes,
-          sundayObligation: row.sunday_obligation,
-        })
-      }
-      // Sort chronologically within each day using the parsed minutes
-      // value — the stored text itself is already display-ready, so it's
-      // shown as-is rather than reformatted.
-      for (const churchTimes of Object.values(grouped)) {
-        for (const day of Object.keys(churchTimes)) {
-          churchTimes[day].sort(
-            (a, b) => (parseTimeToMinutes(a.text) ?? 0) - (parseTimeToMinutes(b.text) ?? 0)
-          )
-        }
-      }
-      setMassTimesByChurch(grouped)
+      setMassTimesByChurch(groupMassTimesByChurch(data))
     }
     loadMassTimes()
   }, [])
@@ -521,12 +558,32 @@ export default function ChurchMap({ theme, onToggleTheme, selectedEvent }) {
           subdomains="abcd"
         />
         <FitToChurches churches={churches} />
+        <FitToRoute route={route} />
+        <FitToCommutePins
+          homeLocation={homeLocation}
+          workLocation={workLocation}
+          active={!route}
+        />
         <InvalidateSizeOnReady />
         <ScrollToZoom />
         <SelectionZoom target={mapSelectionTarget} />
+        {route && (
+          <Polyline positions={route} className="commute-route" pathOptions={{ weight: 4 }} />
+        )}
         {churches.map((church) => (
-          <ChurchMarker key={church.id} church={church} onSelect={setSelectedChurch} />
+          <ChurchMarker
+            key={church.id}
+            church={church}
+            onSelect={setSelectedChurch}
+            highlighted={highlightedChurchIds?.includes(church.id)}
+          />
         ))}
+        {homeLocation && (
+          <Marker position={[homeLocation.lat, homeLocation.lon]} icon={HOME_MARKER_ICON} />
+        )}
+        {workLocation && (
+          <Marker position={[workLocation.lat, workLocation.lon]} icon={WORK_MARKER_ICON} />
+        )}
         {eventHasCoords && (
           <Marker
             position={[selectedEvent.latitude, selectedEvent.longitude]}
@@ -534,14 +591,16 @@ export default function ChurchMap({ theme, onToggleTheme, selectedEvent }) {
           />
         )}
       </MapContainer>
-      {selectedChurch && (
-        <ChurchCard
-          church={selectedChurch}
-          onClose={() => setSelectedChurch(null)}
-          schedule={massTimesByChurch[selectedChurch.id]}
-          updatedAtLabel={updatedAtLabel}
-        />
-      )}
+      {selectedChurch &&
+        createPortal(
+          <ChurchCard
+            church={selectedChurch}
+            onClose={() => setSelectedChurch(null)}
+            schedule={massTimesByChurch[selectedChurch.id]}
+            updatedAtLabel={updatedAtLabel}
+          />,
+          document.body
+        )}
     </div>
   )
 }

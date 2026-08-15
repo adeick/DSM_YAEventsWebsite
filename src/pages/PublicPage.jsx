@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import EventList from '../components/EventList'
 import ChurchMap from '../components/ChurchMap'
+import CommuteForm from '../components/CommuteForm'
+import CommuteResults from '../components/CommuteResults'
+import { groupMassTimesByChurch, buildMassOptionCards } from '../utils/massSchedule'
+import { getDefaultDay } from '../utils/commuteDay'
+import {
+  geocodeAddress,
+  fetchDrivingRoute,
+  fetchDurationsMatrix,
+  MAX_RESULTS,
+} from '../utils/commuteRoute'
 
 function getEventIdFromUrl() {
   return new URLSearchParams(window.location.search).get('event')
@@ -31,6 +41,33 @@ export default function PublicPage() {
   // overlay toggled by the hamburger button (see the media query in
   // styles.css — this state only has a visible effect below 860px).
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Drives the sidebar's commute UI. 'closed' shows the normal event
+  // list; 'form' shows the address inputs; 'loading' disables them
+  // while geocoding/routing runs; 'results' shows matched churches.
+  // commuteRoute (drawn on the map) is null in the home-only fallback,
+  // where there's no route to measure against.
+  //
+  // Text and resolved-location state live here, not inside
+  // CommuteForm, specifically so navigating from results back to the
+  // form ("Edit addresses") doesn't remount CommuteForm and lose what
+  // was typed — this is the single source of truth for both fields
+  // the whole time the commute panel is open.
+  const [commuteStatus, setCommuteStatus] = useState('closed')
+  const [commuteError, setCommuteError] = useState(null)
+  // Full drive-time-sorted list of every reachable church — NOT capped
+  // to MAX_RESULTS here, so switching the selected day (which can
+  // exclude some churches entirely) still has the rest of the list to
+  // draw the next-best options from. Card display + the MAX_RESULTS
+  // cap happen in buildMassOptionCards, derived below.
+  const [commuteRankedChurches, setCommuteRankedChurches] = useState([])
+  const [commuteRoute, setCommuteRoute] = useState(null)
+  const [commuteMassTimes, setCommuteMassTimes] = useState({})
+  const [commuteSelectedDay, setCommuteSelectedDay] = useState(getDefaultDay)
+  const [commuteHomeText, setCommuteHomeText] = useState('')
+  const [commuteWorkText, setCommuteWorkText] = useState('')
+  const [commuteHomeLocation, setCommuteHomeLocation] = useState(null)
+  const [commuteWorkLocation, setCommuteWorkLocation] = useState(null)
 
   // Events (and which one is selected) live here rather than inside
   // EventList — ChurchMap needs to know the selected event too, so it
@@ -103,10 +140,158 @@ export default function PublicPage() {
     setSidebarOpen(false)
   }
 
+  async function handleCommuteSubmit() {
+    setCommuteStatus('loading')
+    setCommuteError(null)
+
+    try {
+      // Prefer whatever AddressAutocompleteInput already resolved (via
+      // a picked prediction or blur) — falls back to a fresh geocode
+      // only if the field was never blurred (e.g. Enter pressed while
+      // still focused).
+      const homeLocation = commuteHomeLocation ?? (await geocodeAddress(commuteHomeText))
+      if (!homeLocation) {
+        setCommuteError("Couldn't find that home address — double check it and try again.")
+        setCommuteStatus('form')
+        return
+      }
+      setCommuteHomeLocation(homeLocation)
+
+      // No work address: fall back to "churches near home" rather than
+      // a route, since there's nothing to draw a route between.
+      let workLocation = null
+      let routeCoordinates = null
+      if (commuteWorkText.trim()) {
+        workLocation = commuteWorkLocation ?? (await geocodeAddress(commuteWorkText))
+        if (!workLocation) {
+          setCommuteError("Couldn't find that work address — double check it and try again.")
+          setCommuteStatus('form')
+          return
+        }
+        setCommuteWorkLocation(workLocation)
+        const directRoute = await fetchDrivingRoute(
+          { lat: homeLocation.lat, lon: homeLocation.lon },
+          { lat: workLocation.lat, lon: workLocation.lon }
+        )
+        if (!directRoute) {
+          setCommuteError("Couldn't find a driving route between those two addresses.")
+          setCommuteStatus('form')
+          return
+        }
+        routeCoordinates = directRoute.coordinates
+      }
+
+      const { data: churchRows, error: churchError } = await supabase
+        .from('churches')
+        .select('*')
+        .or('ignore.eq.false,ignore.is.null')
+      if (churchError || !churchRows) {
+        setCommuteError('Something went wrong loading parish locations — try again.')
+        setCommuteStatus('form')
+        return
+      }
+
+      const churchPoints = churchRows.map((c) => ({ lat: c.latitude, lon: c.longitude }))
+
+      // Rank by total drive time A -> church -> B, not just proximity
+      // to the straight-line route: a church that's technically close
+      // to the route but sits down a dead-end or across a river can
+      // cost far more time than one that's a bit farther but naturally
+      // on the way. With no work address there's no "B" leg, so it's
+      // just drive time from home. Kept as the FULL sorted list (see
+      // commuteRankedChurches above) — capping to MAX_RESULTS happens
+      // later, per selected day, in buildMassOptionCards.
+      //
+      // When a work address is given, all four directions are needed —
+      // not just home->church->work — because the leave-by/arrive-by
+      // times shown for noon and evening Masses run the opposite way
+      // (work->church, church->home), and OSRM's driving durations are
+      // directional (a one-way street can make the reverse trip a
+      // different length).
+      let rankedChurches
+      if (workLocation) {
+        const homePoint = { lat: homeLocation.lat, lon: homeLocation.lon }
+        const workPoint = { lat: workLocation.lat, lon: workLocation.lon }
+        const [homeToChurch, churchToWork, workToChurch, churchToHome] = await Promise.all([
+          fetchDurationsMatrix([homePoint], churchPoints),
+          fetchDurationsMatrix(churchPoints, [workPoint]),
+          fetchDurationsMatrix([workPoint], churchPoints),
+          fetchDurationsMatrix(churchPoints, [homePoint]),
+        ])
+        if (!homeToChurch || !churchToWork || !workToChurch || !churchToHome) {
+          setCommuteError('Something went wrong calculating drive times — try again.')
+          setCommuteStatus('form')
+          return
+        }
+        rankedChurches = churchRows
+          .map((church, i) => {
+            const leg1Seconds = homeToChurch[0][i] // home -> church
+            const leg2Seconds = churchToWork[i][0] // church -> work
+            const leg3Seconds = workToChurch[0][i] // work -> church
+            const leg4Seconds = churchToHome[i][0] // church -> home
+            if ([leg1Seconds, leg2Seconds, leg3Seconds, leg4Seconds].some((s) => s == null)) {
+              return null // no driving route in one of the four directions
+            }
+            return {
+              church,
+              totalSeconds: leg1Seconds + leg2Seconds, // still the A->church->B ranking metric
+              leg1Seconds,
+              leg2Seconds,
+              leg3Seconds,
+              leg4Seconds,
+            }
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.totalSeconds - b.totalSeconds)
+      } else {
+        const homeToChurch = await fetchDurationsMatrix(
+          [{ lat: homeLocation.lat, lon: homeLocation.lon }],
+          churchPoints
+        )
+        if (!homeToChurch) {
+          setCommuteError('Something went wrong calculating drive times — try again.')
+          setCommuteStatus('form')
+          return
+        }
+        rankedChurches = churchRows
+          .map((church, i) => {
+            const totalSeconds = homeToChurch[0][i]
+            if (totalSeconds == null) return null
+            return { church, totalSeconds, leg1Seconds: totalSeconds }
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.totalSeconds - b.totalSeconds)
+      }
+
+      const { data: massRows } = await supabase
+        .from('mass_times')
+        .select('id, church_id, day_of_week, time, notes, sunday_obligation')
+
+      setCommuteMassTimes(groupMassTimesByChurch(massRows || []))
+      setCommuteRankedChurches(rankedChurches)
+      setCommuteRoute(routeCoordinates)
+      setCommuteStatus('results')
+    } catch {
+      setCommuteError('Something went wrong finding mass times — try again.')
+      setCommuteStatus('form')
+    }
+  }
+
   function handleCloseEvent() {
     setSelectedEvent(null)
     window.history.pushState({}, '', window.location.pathname)
   }
+
+  // Re-derived on every render (cheap at diocese scale — tens of
+  // churches, not thousands) rather than stored in state, so switching
+  // the selected day just recomputes which cards to show from data
+  // already in memory. No network request involved.
+  const commuteCards = buildMassOptionCards(
+    commuteRankedChurches,
+    commuteMassTimes,
+    commuteSelectedDay,
+    MAX_RESULTS
+  )
 
   return (
     <div className="app" data-theme={theme}>
@@ -133,31 +318,76 @@ export default function PublicPage() {
           className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}
           aria-label="Upcoming events"
         >
-          <button type="button" className="commute-button">
-            Add Daily Mass to your commute
-          </button>
+          {commuteStatus === 'closed' ? (
+            <>
+              <button
+                type="button"
+                className="commute-button"
+                onClick={() => setCommuteStatus('form')}
+              >
+                Add Daily Mass to your commute
+              </button>
 
-          <h2 className="sidebar__heading">Upcoming Events</h2>
+              <h2 className="sidebar__heading">Upcoming Events</h2>
 
-          <div className="sidebar__events">
-            <EventList
-              events={events}
-              loading={eventsLoading}
-              error={eventsError}
-              selectedEvent={selectedEvent}
-              onSelectEvent={handleSelectEvent}
-              onCloseEvent={handleCloseEvent}
+              <div className="sidebar__events">
+                <EventList
+                  events={events}
+                  loading={eventsLoading}
+                  error={eventsError}
+                  selectedEvent={selectedEvent}
+                  onSelectEvent={handleSelectEvent}
+                  onCloseEvent={handleCloseEvent}
+                />
+              </div>
+
+              <div className="sidebar__footer">
+                <a className="staff-link" href="/admin">
+                  Staff Login
+                </a>
+              </div>
+            </>
+          ) : commuteStatus === 'results' ? (
+            <CommuteResults
+              cards={commuteCards}
+              hasRoute={Boolean(commuteRoute)}
+              selectedDay={commuteSelectedDay}
+              onSelectDay={setCommuteSelectedDay}
+              onBack={() => setCommuteStatus('form')}
             />
-          </div>
-
-          <div className="sidebar__footer">
-            <a className="staff-link" href="/admin">
-              Staff Login
-            </a>
-          </div>
+          ) : (
+            <CommuteForm
+              onBack={() => setCommuteStatus('closed')}
+              onSubmit={handleCommuteSubmit}
+              loading={commuteStatus === 'loading'}
+              error={commuteError}
+              homeText={commuteHomeText}
+              onHomeTextChange={setCommuteHomeText}
+              homeLocation={commuteHomeLocation}
+              onHomeLocationChange={setCommuteHomeLocation}
+              workText={commuteWorkText}
+              onWorkTextChange={setCommuteWorkText}
+              workLocation={commuteWorkLocation}
+              onWorkLocationChange={setCommuteWorkLocation}
+              selectedDay={commuteSelectedDay}
+              onSelectDay={setCommuteSelectedDay}
+            />
+          )}
         </aside>
         <section className="app__map" aria-label="Parish locations">
-          <ChurchMap theme={theme} onToggleTheme={toggleTheme} selectedEvent={selectedEvent} />
+          <ChurchMap
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            selectedEvent={selectedEvent}
+            route={commuteStatus === 'results' ? commuteRoute : null}
+            highlightedChurchIds={
+              commuteStatus === 'results'
+                ? [...new Set(commuteCards.map((c) => c.church.id))]
+                : null
+            }
+            homeLocation={commuteStatus !== 'closed' ? commuteHomeLocation : null}
+            workLocation={commuteStatus !== 'closed' ? commuteWorkLocation : null}
+          />
         </section>
       </main>
     </div>
