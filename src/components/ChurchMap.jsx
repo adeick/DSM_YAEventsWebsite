@@ -205,6 +205,34 @@ function InvalidateSizeOnReady() {
   return null
 }
 
+// On mobile, opening the hamburger menu shrinks the map container
+// itself (see .church-map-shell--compact) rather than just covering
+// the bottom half with the sidebar sheet — that's what lets fitBounds
+// calls (FitToRoute, FitToCommutePins) center correctly within the
+// actually-visible area instead of a taller area half-hidden behind
+// the menu. But Leaflet has no way to detect that CSS-driven resize on
+// its own — it only remeasures on the browser's own resize event —
+// so this forces a remeasure once the resize transition finishes.
+// Both a rAF (catches near-instant/no-transition cases) and a timeout
+// matching the CSS transition duration (260ms, just past the 250ms
+// transition — see .church-map-shell) are used together since a
+// single strategy can't reliably cover both.
+function InvalidateSizeOnCompactChange({ compact }) {
+  const map = useMap()
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => map.invalidateSize())
+    const timeout = setTimeout(() => map.invalidateSize(), 260)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timeout)
+    }
+  }, [map, compact])
+
+  return null
+}
+
 // Zoom level to fly to when a church or event is selected.
 const SELECTED_ZOOM = 16
 
@@ -454,6 +482,7 @@ export default function ChurchMap({
   highlightedChurchIds,
   homeLocation,
   workLocation,
+  mapCompact,
 }) {
   const [churches, setChurches] = useState([])
   const [selectedChurch, setSelectedChurch] = useState(null)
@@ -538,7 +567,7 @@ export default function ChurchMap({
     // already carries it, and [data-theme='dark'] selectors in
     // styles.css match on any ancestor, so this stays in sync with
     // the header/sidebar for free.
-    <div className="church-map-shell">
+    <div className={`church-map-shell${mapCompact ? ' church-map-shell--compact' : ''}`}>
       <button type="button" className="church-theme-toggle" onClick={onToggleTheme}>
         {theme === 'light' ? 'Dark map' : 'Light map'}
       </button>
@@ -565,6 +594,7 @@ export default function ChurchMap({
           active={!route}
         />
         <InvalidateSizeOnReady />
+        <InvalidateSizeOnCompactChange compact={mapCompact} />
         <ScrollToZoom />
         <SelectionZoom target={mapSelectionTarget} />
         {route && (

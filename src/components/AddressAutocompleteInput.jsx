@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { searchAddresses, geocodeAddress } from '../utils/commuteRoute'
 
-// Debounce delay for prediction lookups. Nominatim's usage policy
-// expects modest, human-paced traffic rather than a request per
-// keystroke, so this waits for a pause in typing instead of querying
-// on every character.
-const PREDICTION_DEBOUNCE_MS = 400
-const MIN_QUERY_LENGTH = 3
+// Debounce delay for prediction lookups. Geoapify's free plan allows
+// far more headroom (5 requests/second) than Nominatim's old 1/sec, so
+// this stays quick — fires after a brief pause rather than on every
+// single keystroke, without making the person wait a full second.
+const PREDICTION_DEBOUNCE_MS = 200
+const MIN_QUERY_LENGTH = 2
 
 // Controlled text input with a below-the-field prediction dropdown
-// (Nominatim, bounded to the Des Moines area — see commuteRoute.js)
-// and a "resolved location" that PublicPage uses to drop a preview pin
-// on the map. `location` is null whenever the visible text hasn't been
+// (Geoapify, bounded to the Des Moines area — see commuteRoute.js) and
+// a "resolved location" that PublicPage uses to drop a preview pin on
+// the map. `location` is null whenever the visible text hasn't been
 // confirmed against a real address yet — either because it was just
 // selected from the dropdown, or because the field was blurred and a
 // one-shot geocode succeeded.
@@ -29,31 +29,38 @@ export default function AddressAutocompleteInput({
   const [predictions, setPredictions] = useState([])
   const [showPredictions, setShowPredictions] = useState(false)
   const debounceRef = useRef(null)
-  const requestIdRef = useRef(0)
   const blurTimeoutRef = useRef(null)
+  // Aborts whichever prediction request is currently in flight when a
+  // newer one starts — cheaper than letting a stale request finish
+  // and just discarding its response, and it stops slow/abandoned
+  // requests from eating into Geoapify's per-second rate limit.
+  const abortControllerRef = useRef(null)
 
   useEffect(() => {
     return () => {
       clearTimeout(debounceRef.current)
       clearTimeout(blurTimeoutRef.current)
+      abortControllerRef.current?.abort()
     }
   }, [])
 
   function scheduleLookup(query) {
     clearTimeout(debounceRef.current)
+    abortControllerRef.current?.abort()
     if (query.trim().length < MIN_QUERY_LENGTH) {
       setPredictions([])
       return
     }
     debounceRef.current = setTimeout(async () => {
-      const requestId = ++requestIdRef.current
-      const results = await searchAddresses(query)
-      // A newer keystroke may have started a second request while this
-      // one was in flight — ignore this response if it's no longer the
-      // latest one requested.
-      if (requestId !== requestIdRef.current) return
-      setPredictions(results)
-      setShowPredictions(results.length > 0)
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+      try {
+        const results = await searchAddresses(query, 5, controller.signal)
+        setPredictions(results)
+        setShowPredictions(results.length > 0)
+      } catch (err) {
+        if (err.name !== 'AbortError') throw err // a real failure, not just superseded
+      }
     }, PREDICTION_DEBOUNCE_MS)
   }
 
@@ -83,6 +90,7 @@ export default function AddressAutocompleteInput({
 
   function handleClear() {
     clearTimeout(debounceRef.current)
+    abortControllerRef.current?.abort()
     onChange('')
     onLocationChange(null)
     setPredictions([])

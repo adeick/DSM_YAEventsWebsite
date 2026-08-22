@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import EventList from '../components/EventList'
 import ChurchMap from '../components/ChurchMap'
 import CommuteForm from '../components/CommuteForm'
 import CommuteResults from '../components/CommuteResults'
-import { groupMassTimesByChurch, buildMassOptionCards } from '../utils/massSchedule'
+import { groupMassTimesByChurch, buildMassOptionCards, parseTimeToMinutes } from '../utils/massSchedule'
 import { getDefaultDay } from '../utils/commuteDay'
 import {
   geocodeAddress,
@@ -62,12 +62,21 @@ export default function PublicPage() {
   // cap happen in buildMassOptionCards, derived below.
   const [commuteRankedChurches, setCommuteRankedChurches] = useState([])
   const [commuteRoute, setCommuteRoute] = useState(null)
+  // Set when a specific Mass time is clicked — a home->church->work
+  // route replacing the general home->work line above. Cleared on a
+  // new search or a day change, since the previously focused option
+  // may no longer be among the displayed cards.
+  const [commuteFocusedRoute, setCommuteFocusedRoute] = useState(null)
+  const [commuteFocusedChurchId, setCommuteFocusedChurchId] = useState(null)
   const [commuteMassTimes, setCommuteMassTimes] = useState({})
   const [commuteSelectedDay, setCommuteSelectedDay] = useState(getDefaultDay)
   const [commuteHomeText, setCommuteHomeText] = useState('')
   const [commuteWorkText, setCommuteWorkText] = useState('')
   const [commuteHomeLocation, setCommuteHomeLocation] = useState(null)
   const [commuteWorkLocation, setCommuteWorkLocation] = useState(null)
+  // Guards against an older click's response overwriting a newer one
+  // if someone clicks a second Mass time before the first route finishes.
+  const focusRouteRequestIdRef = useRef(0)
 
   // Events (and which one is selected) live here rather than inside
   // EventList — ChurchMap needs to know the selected event too, so it
@@ -169,10 +178,13 @@ export default function PublicPage() {
           return
         }
         setCommuteWorkLocation(workLocation)
-        const directRoute = await fetchDrivingRoute(
+        // Only used for the map polyline now — the detour baseline
+        // below is computed from the Table API instead (see
+        // tableDirectDurationSeconds), not this route's own duration.
+        const directRoute = await fetchDrivingRoute([
           { lat: homeLocation.lat, lon: homeLocation.lon },
-          { lat: workLocation.lat, lon: workLocation.lon }
-        )
+          { lat: workLocation.lat, lon: workLocation.lon },
+        ])
         if (!directRoute) {
           setCommuteError("Couldn't find a driving route between those two addresses.")
           setCommuteStatus('form')
@@ -212,20 +224,40 @@ export default function PublicPage() {
       if (workLocation) {
         const homePoint = { lat: homeLocation.lat, lon: homeLocation.lon }
         const workPoint = { lat: workLocation.lat, lon: workLocation.lon }
-        const [homeToChurch, churchToWork, workToChurch, churchToHome] = await Promise.all([
-          fetchDurationsMatrix([homePoint], churchPoints),
-          fetchDurationsMatrix(churchPoints, [workPoint]),
-          fetchDurationsMatrix([workPoint], churchPoints),
-          fetchDurationsMatrix(churchPoints, [homePoint]),
-        ])
-        if (!homeToChurch || !churchToWork || !workToChurch || !churchToHome) {
+        // homeToChurchAndWork tacks `work` on as one extra destination
+        // on the same request as the home->church legs, specifically
+        // so the direct home->work baseline used for detourSeconds
+        // below comes from the SAME service (Table) as leg1/leg2 —
+        // comparing a Table-derived total against a Route-derived
+        // baseline was the original bug: OSRM's /route and /table
+        // services use different underlying algorithms and don't
+        // always agree on a duration for the identical road segment,
+        // which was making genuine detours of several minutes come out
+        // as ~0 after the Math.max(0, ...) clamp below, and "On the
+        // Way" show up far more often than it should have.
+        const [homeToChurchAndWork, churchToWork, workToChurch, churchToHome] = await Promise.all(
+          [
+            fetchDurationsMatrix([homePoint], [...churchPoints, workPoint]),
+            fetchDurationsMatrix(churchPoints, [workPoint]),
+            fetchDurationsMatrix([workPoint], churchPoints),
+            fetchDurationsMatrix(churchPoints, [homePoint]),
+          ]
+        )
+        if (!homeToChurchAndWork || !churchToWork || !workToChurch || !churchToHome) {
           setCommuteError('Something went wrong calculating drive times — try again.')
+          setCommuteStatus('form')
+          return
+        }
+        const homeToChurch = homeToChurchAndWork[0].slice(0, churchPoints.length)
+        const tableDirectDurationSeconds = homeToChurchAndWork[0][churchPoints.length]
+        if (tableDirectDurationSeconds == null) {
+          setCommuteError("Couldn't find a driving route between those two addresses.")
           setCommuteStatus('form')
           return
         }
         rankedChurches = churchRows
           .map((church, i) => {
-            const leg1Seconds = homeToChurch[0][i] // home -> church
+            const leg1Seconds = homeToChurch[i] // home -> church
             const leg2Seconds = churchToWork[i][0] // church -> work
             const leg3Seconds = workToChurch[0][i] // work -> church
             const leg4Seconds = churchToHome[i][0] // church -> home
@@ -235,6 +267,10 @@ export default function PublicPage() {
             return {
               church,
               totalSeconds: leg1Seconds + leg2Seconds, // still the A->church->B ranking metric
+              // How much LONGER the trip gets by routing through this
+              // church, vs. driving straight home->work — using the
+              // Table-derived baseline above, not the Route API's.
+              detourSeconds: Math.max(0, leg1Seconds + leg2Seconds - tableDirectDurationSeconds),
               leg1Seconds,
               leg2Seconds,
               leg3Seconds,
@@ -270,11 +306,45 @@ export default function PublicPage() {
       setCommuteMassTimes(groupMassTimesByChurch(massRows || []))
       setCommuteRankedChurches(rankedChurches)
       setCommuteRoute(routeCoordinates)
+      focusRouteRequestIdRef.current++ // invalidate any in-flight focus-route fetch
+      setCommuteFocusedRoute(null)
+      setCommuteFocusedChurchId(null)
       setCommuteStatus('results')
     } catch {
       setCommuteError('Something went wrong finding mass times — try again.')
       setCommuteStatus('form')
     }
+  }
+
+  // Fetches an actual route through the clicked church — home->church
+  // when there's no work address, home->church->work when there is —
+  // and shows it in place of the general line. Triggered by clicking
+  // a specific Mass time in CommuteResults.
+  async function handleFocusChurchRoute(church) {
+    if (!commuteHomeLocation) return // no route without at least home
+    const requestId = ++focusRouteRequestIdRef.current
+    const waypoints = [
+      { lat: commuteHomeLocation.lat, lon: commuteHomeLocation.lon },
+      { lat: church.latitude, lon: church.longitude },
+    ]
+    if (commuteWorkLocation) {
+      waypoints.push({ lat: commuteWorkLocation.lat, lon: commuteWorkLocation.lon })
+    }
+    const route = await fetchDrivingRoute(waypoints)
+    if (requestId !== focusRouteRequestIdRef.current) return // superseded by a later click
+    if (!route) return // OSRM hiccup — leave the general route showing rather than clear it
+    setCommuteFocusedRoute(route.coordinates)
+    setCommuteFocusedChurchId(church.id)
+  }
+
+  // Changing days can change which options are even displayed, so a
+  // previously focused church's route may no longer correspond to
+  // anything on screen — clear it rather than leave a stale route drawn.
+  function handleSelectCommuteDay(day) {
+    focusRouteRequestIdRef.current++ // invalidate any in-flight focus-route fetch
+    setCommuteFocusedRoute(null)
+    setCommuteFocusedChurchId(null)
+    setCommuteSelectedDay(day)
   }
 
   function handleCloseEvent() {
@@ -286,12 +356,27 @@ export default function PublicPage() {
   // churches, not thousands) rather than stored in state, so switching
   // the selected day just recomputes which cards to show from data
   // already in memory. No network request involved.
+  //
+  // buildMassOptionCards still selects which 6 options make the list
+  // by drive-time rank (closest churches first) — that part is
+  // unchanged. `rankIndex` captures each card's position in that
+  // drive-time order before the list below gets re-sorted for DISPLAY
+  // by Mass time — CommuteResults uses rankIndex (not display
+  // position) for the On the Way / Closer / Further badge, so the
+  // badge still reflects commute proximity even though cards are shown
+  // in time order.
   const commuteCards = buildMassOptionCards(
     commuteRankedChurches,
     commuteMassTimes,
     commuteSelectedDay,
     MAX_RESULTS
-  )
+  ).map((card, rankIndex) => ({ ...card, rankIndex }))
+
+  const commuteCardsByTime = [...commuteCards].sort((a, b) => {
+    const aMinutes = parseTimeToMinutes(a.massTime.text) ?? 0
+    const bMinutes = parseTimeToMinutes(b.massTime.text) ?? 0
+    return aMinutes - bMinutes
+  })
 
   return (
     <div className="app" data-theme={theme}>
@@ -349,10 +434,13 @@ export default function PublicPage() {
             </>
           ) : commuteStatus === 'results' ? (
             <CommuteResults
-              cards={commuteCards}
+              cardsByTime={commuteCardsByTime}
+              cardsByLocation={commuteCards}
               hasRoute={Boolean(commuteRoute)}
               selectedDay={commuteSelectedDay}
-              onSelectDay={setCommuteSelectedDay}
+              onSelectDay={handleSelectCommuteDay}
+              onFocusRoute={handleFocusChurchRoute}
+              focusedChurchId={commuteFocusedChurchId}
               onBack={() => setCommuteStatus('form')}
             />
           ) : (
@@ -379,7 +467,7 @@ export default function PublicPage() {
             theme={theme}
             onToggleTheme={toggleTheme}
             selectedEvent={selectedEvent}
-            route={commuteStatus === 'results' ? commuteRoute : null}
+            route={commuteStatus === 'results' ? (commuteFocusedRoute ?? commuteRoute) : null}
             highlightedChurchIds={
               commuteStatus === 'results'
                 ? [...new Set(commuteCards.map((c) => c.church.id))]
@@ -387,6 +475,7 @@ export default function PublicPage() {
             }
             homeLocation={commuteStatus !== 'closed' ? commuteHomeLocation : null}
             workLocation={commuteStatus !== 'closed' ? commuteWorkLocation : null}
+            mapCompact={sidebarOpen}
           />
         </section>
       </main>
