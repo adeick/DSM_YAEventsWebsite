@@ -24,6 +24,7 @@ const emptyForm = {
   hour: '18',
   minute: '00',
   description: '',
+  published: true,
 }
 
 export default function EventForm({ userId, onCreated }) {
@@ -67,6 +68,7 @@ export default function EventForm({ userId, onCreated }) {
       event_date: eventDate.toISOString(),
       description: form.description || null,
       created_by: userId,
+      is_published: form.published,
     })
 
     if (error) {
@@ -177,6 +179,15 @@ export default function EventForm({ userId, onCreated }) {
         value={form.description}
         onChange={(value) => updateField('description', value)}
       />
+
+      <label className="event-form__published">
+        <input
+          type="checkbox"
+          checked={form.published}
+          onChange={(e) => updateField('published', e.target.checked)}
+        />
+        Published (visible on the site immediately)
+      </label>
 
       {error && <p className="form-error">{error}</p>}
       {success && <p className="form-success">Event added.</p>}

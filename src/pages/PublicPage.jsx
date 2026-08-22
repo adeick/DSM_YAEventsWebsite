@@ -17,7 +17,7 @@ function getEventIdFromUrl() {
   return new URLSearchParams(window.location.search).get('event')
 }
 
-export default function PublicPage() {
+export default function PublicPage({ previewUnpublished = false }) {
   // Owned here (not inside ChurchMap) so the header and sidebar can
   // react to it too, via the data-theme attribute below — CSS
   // variables redefined under [data-theme='dark'] cascade to
@@ -115,11 +115,20 @@ export default function PublicPage() {
     let isMounted = true
 
     async function loadEvents() {
-      const { data, error } = await supabase
+      // previewUnpublished (set only by DevPage, behind its login
+      // gate) skips the is_published filter so draft events show up
+      // too — everywhere else, only published events are fetched.
+      let query = supabase
         .from('events')
         .select('*')
         .gte('event_date', new Date().toISOString())
         .order('event_date', { ascending: true })
+
+      if (!previewUnpublished) {
+        query = query.eq('is_published', true)
+      }
+
+      const { data, error } = await query
 
       if (!isMounted) return
 
@@ -143,9 +152,7 @@ export default function PublicPage() {
     return () => {
       isMounted = false
     }
-  }, [])
-
-  // Keeps the card in sync with the browser's own back/forward
+  }, [previewUnpublished])
   // buttons — pressing back after opening a card should close it
   // (and forward should reopen it), not leave the URL and the
   // visible card disagreeing with each other.
