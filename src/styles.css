@@ -805,7 +805,13 @@ body {
    regardless of width. */
 .church-card-overlay {
   position: fixed;
-  inset: 0;
+  /* Backdrop starts below the header instead of covering it — see
+     the ResizeObserver in PublicPage that keeps --header-height
+     current across breakpoints. Falls back to 0 if it's ever unset. */
+  top: var(--header-height, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -888,7 +894,13 @@ body {
    above for a consistent feel with the church card. */
 .event-detail-overlay {
   position: fixed;
-  inset: 0;
+  /* Backdrop starts below the header instead of covering it — see
+     the ResizeObserver in PublicPage that keeps --header-height
+     current across breakpoints. Falls back to 0 if it's ever unset. */
+  top: var(--header-height, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;

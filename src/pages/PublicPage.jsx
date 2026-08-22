@@ -37,6 +37,26 @@ export default function PublicPage() {
     document.body.dataset.theme = theme
   }, [theme])
 
+  // Measures the header's real rendered height and exposes it as a
+  // CSS variable on document.body, so portaled full-viewport overlays
+  // (EventDetailCard) can stop their backdrop at the header's bottom
+  // edge instead of covering it. Has to be measured, not hardcoded —
+  // the header's height changes across the mobile and short-viewport
+  // media queries in styles.css. A ResizeObserver (not just a mount-
+  // time measurement) keeps it correct as those breakpoints flip.
+  const headerRef = useRef(null)
+  useEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+    const setHeaderHeightVar = () => {
+      document.body.style.setProperty('--header-height', `${header.offsetHeight}px`)
+    }
+    setHeaderHeightVar()
+    const observer = new ResizeObserver(setHeaderHeightVar)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [])
+
   // Sidebar is always visible on desktop; on mobile it's a hidden
   // overlay toggled by the hamburger button (see the media query in
   // styles.css — this state only has a visible effect below 860px).
@@ -380,7 +400,7 @@ export default function PublicPage() {
 
   return (
     <div className="app" data-theme={theme}>
-      <header className="app__header">
+      <header className="app__header" ref={headerRef}>
         <div>
           <h1>
             Daily Mass <span className="app__header-accent">Des Moines</span>
