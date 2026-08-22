@@ -280,14 +280,21 @@ body {
   background: var(--paper);
 }
 
+/* Uses --accent/--paper (matching .commute-button, the "Add Daily
+   Mass to your commute" CTA) rather than --ink/--paper. Those two
+   swap values in dark mode, which would flip this button from a dark
+   fill to a stark light one — jarring next to the rest of the dark
+   theme's palette. --accent already has its own dark-mode value (a
+   warm gold), so this keeps a consistent filled-button look in both
+   themes instead of inverting. */
 .commute-form__submit {
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   padding: 9px 16px;
   border-radius: 6px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: var(--paper);
   cursor: pointer;
   align-self: flex-start;
@@ -831,11 +838,19 @@ body {
 
 /* Wraps the card and its overlapping image together so the image can
    sit outside the card's box (visually) without being clipped by the
-   card's own overflow-y: auto. */
+   card's own overflow-y: auto.
+   max-height is viewport-relative (not a % of the overlay) on
+   purpose: the overlay's own box now starts below the header (see
+   --header-height above), so a container-relative percentage here
+   would shrink the card whenever the header's height changes. Using
+   vh math instead pins the cap to what it resolved to when the
+   overlay still spanned the full viewport (100vh, minus the
+   overlay's 8vh top padding, times the original 80%), so the card's
+   size stays the same regardless of the header offset. */
 .church-card-wrap {
   position: relative;
   width: min(360px, 90%);
-  max-height: 80%;
+  max-height: calc((100vh - 8vh) * 0.8);
   animation: card-fade-in-up 0.18s ease-out;
 }
 
@@ -914,10 +929,16 @@ body {
   animation: card-overlay-out 0.18s ease-in forwards;
 }
 
+/* max-height is viewport-relative, not a % of the overlay, for the
+   same reason as .church-card-wrap above: the overlay's box now
+   starts below the header, so a container-relative percentage here
+   would shrink whenever the header's height changes. 100vh minus the
+   overlay's 8vh top+bottom padding matches what 100% resolved to
+   when the overlay still spanned the full viewport. */
 .event-detail-wrap {
   position: relative;
   width: min(400px, 100%);
-  max-height: 100%;
+  max-height: calc(100vh - 16vh);
   animation: card-fade-in-up 0.18s ease-out;
 }
 
