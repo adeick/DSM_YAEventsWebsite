@@ -1,7 +1,10 @@
 import PublicPage from './pages/PublicPage'
 import AdminPage from './pages/AdminPage'
+import DevPage from './pages/DevPage'
 
 export default function App() {
-  const isAdmin = window.location.pathname.startsWith('/admin')
-  return isAdmin ? <AdminPage /> : <PublicPage />
+  const path = window.location.pathname
+  if (path.startsWith('/admin')) return <AdminPage />
+  if (path.startsWith('/dev')) return <DevPage />
+  return <PublicPage />
 }

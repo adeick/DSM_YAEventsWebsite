@@ -38,6 +38,7 @@ export default function AdminEventList({ refreshKey }) {
         <li key={event.id}>
           <div>
             <strong>{event.title}</strong>
+            {!event.is_published && <span className="admin-event-list__draft">Draft</span>}
             {event.organizer && (
               <span className="admin-event-list__organizer"> — {event.organizer}</span>
             )}

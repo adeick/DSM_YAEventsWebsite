@@ -1447,6 +1447,18 @@ body {
   background: var(--paper);
 }
 
+/* Overrides the column layout above — a checkbox sits inline with
+   its own label text rather than stacked above it. */
+.event-form label.event-form__published {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-form__published input {
+  width: auto;
+}
+
 .description-field {
   display: flex;
   flex-direction: column;
@@ -1713,6 +1725,20 @@ body {
 .admin-event-list__organizer {
   font-size: 13px;
   color: var(--ink-soft);
+}
+
+/* Small inline flag for events created with "Published" unchecked —
+   these only show up on /dev, not the public site. */
+.admin-event-list__draft {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 8px;
 }
 
 .admin-event-list__date {
