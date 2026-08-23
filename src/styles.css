@@ -1459,6 +1459,33 @@ body {
   width: auto;
 }
 
+.event-form__preview-image {
+  width: 160px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+/* Plain-looking inline toggle for switching between the search and
+   manual-address flows — deliberately understated so it doesn't
+   compete with the real form fields and buttons. */
+.event-form__link-button {
+  align-self: flex-start;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.event-form__link-button:hover {
+  color: var(--ink);
+}
+
 .description-field {
   display: flex;
   flex-direction: column;
@@ -1467,50 +1494,100 @@ body {
 
 .description-field__toolbar {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .description-field__format-button {
-  width: 28px;
-  height: 28px;
-  font-family: inherit;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   color: var(--ink-soft);
-  background: var(--paper);
-  border: 1px solid var(--line);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
 }
 
 .description-field__format-button:hover {
   color: var(--ink);
-  border-color: var(--ink-soft);
+  background: var(--card);
+}
+
+.description-field__format-button--active {
+  color: var(--paper);
+  background: var(--accent);
+}
+
+.description-field__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 2px;
 }
 
 .description-field__toolbar-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 5px 10px;
+  padding: 6px 10px;
   color: var(--ink-soft);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-.description-field__textarea {
-  /* Auto-resize (see DescriptionField's useEffect, which sets an
-     explicit inline height from scrollHeight) needs the browser's own
-     resize handle and vertical scrollbar out of the way, or the two
-     sizing mechanisms fight each other. min-height matches the
-     starting rows={6} so there's no flash of a smaller box before the
-     first resize runs. */
-  min-height: 130px;
-  resize: none;
-  overflow-y: hidden;
+.description-field__toolbar-button:hover {
+  color: var(--ink);
+  background: var(--card);
 }
+
+.description-field__toolbar-button--active {
+  color: var(--paper);
+  background: var(--accent);
+}
+
+.description-field__editor {
+  min-height: 130px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.description-field__editor:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* contentEditable has no native placeholder attribute — this fakes
+   one, shown only while empty and not focused. */
+.description-field__editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-soft);
+}
+
+.description-field__editor a {
+  color: var(--accent);
+}
+
 
 .description-field__link-tool {
   display: flex;
@@ -1562,9 +1639,16 @@ body {
   flex: 1;
 }
 
+/* Scoped to .event-form__submit specifically (not a blanket
+   ".event-form button") — a plain element selector like that would
+   have specificity (0,0,1,1), beating every single-class button
+   style nested inside the form (toolbar buttons, address clear/
+   predictions, geocoder confirm bar, link toggles), silently
+   clobbering their own styling regardless of source order. */
 .login-form button,
-.event-form button,
-.admin-event-list button {
+.event-form__submit,
+.event-form__cancel,
+.admin-event-list__actions button {
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -1578,9 +1662,49 @@ body {
 }
 
 .login-form button:disabled,
-.event-form button:disabled {
+.event-form__submit:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.event-form__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.event-form__cancel {
+  background: none;
+  color: var(--ink-soft);
+}
+
+.admin-event-list__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Edit stays visually lighter than Delete, so Delete remains the one
+   action that reads as "careful, this is destructive". Targeted by
+   its own class rather than :first-child now that Publish/Unpublish
+   also sits in this row. */
+.admin-event-list__edit {
+  background: none;
+  color: var(--ink-soft);
+  border-color: var(--line);
+}
+
+/* Unpublish uses the same muted treatment as Edit; Publish stays the
+   one accent-colored action in the row, matching drafts-popup__publish. */
+.admin-event-list__publish-toggle--unpublish {
+  background: none;
+  color: var(--ink-soft);
+  border-color: var(--line);
+}
+
+.admin-event-list__publish-toggle--publish {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
 }
 
 .admin-page__header-actions button {
@@ -1697,8 +1821,32 @@ body {
   cursor: pointer;
 }
 
-.geocoder__confirm-button--confirmed {
-  background: #3d7a4d;
+/* Replaces the map preview once confirmed — a compact one-line
+   summary instead of leaving the map/drag-pin UI open. */
+.geocoder__confirmed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #3d7a4d;
+}
+
+.geocoder__confirmed-bar button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .admin-event-list {
@@ -1739,6 +1887,107 @@ body {
   border-radius: 4px;
   padding: 1px 6px;
   margin-left: 8px;
+}
+
+.admin-event-list__drafts-toggle {
+  display: block;
+  margin: 14px auto 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.admin-event-list__drafts-toggle:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+
+.drafts-popup-overlay {
+  position: fixed;
+  top: var(--header-height, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 24px;
+}
+
+.drafts-popup {
+  width: min(360px, 100%);
+  max-height: calc((100vh - 8vh) * 0.8);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drafts-popup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drafts-popup__header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.drafts-popup__close {
+  font-size: 18px;
+  line-height: 1;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.drafts-popup__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drafts-popup__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.drafts-popup__publish {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
 }
 
 .admin-event-list__date {

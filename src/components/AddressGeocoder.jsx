@@ -89,7 +89,7 @@ export default function AddressGeocoder({ address, onConfirm }) {
         </p>
       )}
 
-      {status === 'found' && position && (
+      {status === 'found' && position && !confirmed && (
         <div className="geocoder__preview">
           <div className="geocoder__map">
             <MapContainer center={position} zoom={16} className="geocoder__map-inner">
@@ -109,14 +109,21 @@ export default function AddressGeocoder({ address, onConfirm }) {
           </div>
           <p className="geocoder__resolved">{displayName}</p>
           <p className="geocoder__hint">Drag the pin if it's not quite right.</p>
-          <button
-            type="button"
-            className={
-              'geocoder__confirm-button' + (confirmed ? ' geocoder__confirm-button--confirmed' : '')
-            }
-            onClick={handleConfirm}
-          >
-            {confirmed ? '✓ Location confirmed' : 'Confirm this location'}
+          <button type="button" className="geocoder__confirm-button" onClick={handleConfirm}>
+            Confirm this location
+          </button>
+        </div>
+      )}
+
+      {/* Collapses the map away once confirmed instead of leaving it
+          open — "Change" reopens the same preview (position/displayName
+          are still in state) so re-dragging the pin doesn't require a
+          fresh lookup. */}
+      {confirmed && (
+        <div className="geocoder__confirmed-bar">
+          <span>✓ Location confirmed — {displayName}</span>
+          <button type="button" onClick={() => setConfirmed(false)}>
+            Change
           </button>
         </div>
       )}

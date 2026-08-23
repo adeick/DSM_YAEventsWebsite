@@ -8,6 +8,7 @@ import AdminEventList from '../components/AdminEventList'
 export default function AdminPage() {
   const session = useSession()
   const [refreshKey, setRefreshKey] = useState(0)
+  const [editingEvent, setEditingEvent] = useState(null)
 
   if (session === undefined) {
     return <p className="event-list__status">Loading…</p>
@@ -44,9 +45,11 @@ export default function AdminPage() {
       <div className="admin-page__content">
         <EventForm
           userId={session.user.id}
-          onCreated={() => setRefreshKey((k) => k + 1)}
+          editingEvent={editingEvent}
+          onSaved={() => setRefreshKey((k) => k + 1)}
+          onCancelEdit={() => setEditingEvent(null)}
         />
-        <AdminEventList refreshKey={refreshKey} />
+        <AdminEventList refreshKey={refreshKey} onEdit={setEditingEvent} />
       </div>
     </div>
   )
