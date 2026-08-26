@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import AddressAutocompleteInput from './AddressAutocompleteInput'
+import LocationSearchInput from './LocationSearchInput'
+import OrganizerInput from './OrganizerInput'
 import AddressGeocoder from './AddressGeocoder'
 import DescriptionField from './DescriptionField'
 
@@ -16,9 +17,31 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour24) => {
 
 const MINUTE_OPTIONS = ['00', '15', '30', '45']
 
+// Geoapify's address_line1 is usually just the street address for a
+// POI match, but not always — some results front-load the venue name
+// there (or in the `formatted` string this falls back to when
+// addressLine1/2 aren't present) the same way `formatted` always
+// does. Since Location and Address are shown as two separate fields
+// now, having the venue name repeated at the start of the address
+// line reads as redundant/wrong ("Pastoral Center, Pastoral Center,
+// 601 Grand Ave…") — this strips a leading occurrence of the name
+// (plus a trailing comma/space) when the address text happens to lead
+// with it, and leaves the text untouched otherwise.
+function stripLeadingVenueName(name, addressText) {
+  if (!name || !addressText) return addressText
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^\\s*${escapedName}\\s*,?\\s*`, 'i')
+  const stripped = addressText.replace(pattern, '').trim()
+  // Guards against a POI whose entire "address" IS its name (nothing
+  // left after stripping) — better to keep the redundant original
+  // than to end up with a blank Address field.
+  return stripped || addressText
+}
+
 const emptyForm = {
   title: '',
   organizer: '',
+  organizerId: null,
   locationName: '',
   address: '',
   date: '',
@@ -29,27 +52,32 @@ const emptyForm = {
   previewImageUrl: '',
 }
 
-export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit }) {
+export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit, imagesVersion }) {
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
-  // Only set once a location is confirmed, either by picking a search
-  // result (primary flow, below) or by confirming the pin on the
-  // fallback geocoder's preview map — null blocks submission (see the
+  // Only set once the admin explicitly confirms the pin on
+  // AddressGeocoder's preview map — null blocks submission (see the
   // button below) so an event can't be saved without a verified
   // location.
   const [confirmedCoords, setConfirmedCoords] = useState(null)
-  // Search-first is the primary flow; this reveals the old manual
-  // type-address-then-geocode flow as an explicit fallback for
-  // addresses the search can't find.
-  const [useManualAddress, setUseManualAddress] = useState(false)
+  // Passed into AddressGeocoder as `initialResult` so picking a
+  // LocationSearchInput prediction opens the confirm map immediately
+  // with that result's own coordinates, instead of making the admin
+  // click "Find on map" and re-geocode text that's already resolved.
+  // Cleared whenever the address is edited by hand (see updateField)
+  // so a stale pin can't seed a remount of the geocoder for text it
+  // no longer matches.
+  const [geocoderSeed, setGeocoderSeed] = useState(null)
   // Options for the featured-image dropdown, below. Not yet filtered
   // by the admin's organization/location — every admin sees every
   // row in event_preview_images for now (see chat: no admin
   // profile/org data exists yet to filter by).
   const [previewImages, setPreviewImages] = useState([])
+  // Options for OrganizerInput's dropdown, below.
+  const [organizations, setOrganizations] = useState([])
   const formRef = useRef(null)
 
   useEffect(() => {
@@ -60,7 +88,14 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
       .then(({ data, error }) => {
         if (!error) setPreviewImages(data)
       })
-  }, [])
+    supabase
+      .from('organizations')
+      .select('id, name')
+      .order('name', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error) setOrganizations(data)
+      })
+  }, [imagesVersion])
 
   // Populates the form from an existing event when "Edit" is clicked
   // in the list (see AdminEventList/AdminPage), and clears back to a
@@ -72,7 +107,7 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
     if (!editingEvent) {
       setForm(emptyForm)
       setConfirmedCoords(null)
-      setUseManualAddress(false)
+      setGeocoderSeed(null)
       setError(null)
       return
     }
@@ -86,6 +121,7 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
     setForm({
       title: editingEvent.title || '',
       organizer: editingEvent.organizer || '',
+      organizerId: editingEvent.organizer_id || null,
       locationName: editingEvent.location_name || '',
       address: editingEvent.address || '',
       date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
@@ -96,7 +132,17 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
       previewImageUrl: editingEvent.location_photo_url || '',
     })
     setConfirmedCoords({ lat: editingEvent.latitude, lng: editingEvent.longitude })
-    setUseManualAddress(false)
+    // Seeds AddressGeocoder straight into its "confirmed" state (not
+    // just "found") since this location was already confirmed when
+    // the event was first created — otherwise editing would
+    // misleadingly show an unconfirmed map prompt for a location
+    // that's actually already saved and valid.
+    setGeocoderSeed({
+      lat: editingEvent.latitude,
+      lon: editingEvent.longitude,
+      displayName: editingEvent.address || '',
+      confirmed: true,
+    })
     setSuccess(false)
     setError(null)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -105,11 +151,28 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
   function updateField(field, value) {
     setForm((f) => ({ ...f, [field]: value }))
     setSuccess(false)
-    // The confirmed pin belonged to the OLD address text — once that
-    // text changes, it's no longer trustworthy and needs re-confirming.
+    // The confirmed pin (and any seeded geocoder preview) belonged to
+    // the OLD address text — once that text changes, both are stale
+    // and the location needs re-confirming from scratch.
     if (field === 'address') {
       setConfirmedCoords(null)
+      setGeocoderSeed(null)
     }
+  }
+
+  // Called when a LocationSearchInput prediction is picked: fills the
+  // Address field with that result's address, and seeds
+  // AddressGeocoder to open already showing that pin — skipping a
+  // redundant Nominatim re-lookup of text Geoapify already resolved
+  // precisely. Still requires the admin to explicitly confirm it
+  // (geocoderSeed doesn't set `confirmed`), same as the manual flow.
+  function handleLocationPrediction(prediction) {
+    const rawAddress =
+      [prediction.addressLine1, prediction.addressLine2].filter(Boolean).join(', ') ||
+      prediction.displayName
+    const addressText = stripLeadingVenueName(prediction.name, rawAddress)
+    updateField('address', addressText)
+    setGeocoderSeed({ lat: prediction.lat, lon: prediction.lon, displayName: prediction.displayName })
   }
 
   async function handleSubmit(e) {
@@ -127,6 +190,7 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
     const eventFields = {
       title: form.title,
       organizer: form.organizer,
+      organizer_id: form.organizerId,
       location_name: form.locationName,
       address: form.address,
       location_photo_url: form.previewImageUrl || null,
@@ -169,84 +233,37 @@ export default function EventForm({ userId, editingEvent, onSaved, onCancelEdit 
       </label>
 
       <div className="event-form__row">
-        <label>
-          Organizer
-          <input
-            type="text"
-            value={form.organizer}
-            onChange={(e) => updateField('organizer', e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          Location
-          <input
-            type="text"
-            value={form.locationName}
-            onChange={(e) => updateField('locationName', e.target.value)}
-            placeholder="e.g. Pastoral Center"
-            required
-          />
-        </label>
+        <OrganizerInput
+          value={form.organizer}
+          onChange={(text) => updateField('organizer', text)}
+          organizations={organizations}
+          onSelectOrganization={(org) => setForm((f) => ({ ...f, organizerId: org ? org.id : null }))}
+        />
+        <LocationSearchInput
+          value={form.locationName}
+          onChange={(text) => updateField('locationName', text)}
+          onSelectPrediction={handleLocationPrediction}
+        />
       </div>
 
-      {/* Primary flow: search returns the address AND coordinates
-          together, so there's no separate confirm step. The old
-          type-address-then-geocode flow is still here, just demoted
-          to an explicit fallback for locations the search misses. */}
-      {!useManualAddress ? (
-        <>
-          <AddressAutocompleteInput
-            label="Address"
-            required
-            placeholder="Search for the venue name or address"
-            value={form.address}
-            onChange={(text) => updateField('address', text)}
-            location={confirmedCoords ? { lat: confirmedCoords.lat, lon: confirmedCoords.lng } : null}
-            onLocationChange={(loc) =>
-              setConfirmedCoords(loc ? { lat: loc.lat, lng: loc.lon } : null)
-            }
-          />
-          <button
-            type="button"
-            className="event-form__link-button"
-            onClick={() => setUseManualAddress(true)}
-          >
-            Can't find it? Enter the address manually instead
-          </button>
-        </>
-      ) : (
-        <>
-          <label>
-            Address
-            <input
-              type="text"
-              value={form.address}
-              onChange={(e) => updateField('address', e.target.value)}
-              placeholder="e.g. 601 Grand Avenue, Des Moines, IA 50309"
-              required
-            />
-          </label>
+      <label>
+        Address
+        <input
+          type="text"
+          value={form.address}
+          onChange={(e) => updateField('address', e.target.value)}
+          placeholder="e.g. 601 Grand Avenue, Des Moines, IA 50309"
+          required
+        />
+      </label>
 
-          {form.address.trim() && (
-            <AddressGeocoder
-              key={form.address}
-              address={form.address}
-              onConfirm={(lat, lng) => setConfirmedCoords({ lat, lng })}
-            />
-          )}
-
-          <button
-            type="button"
-            className="event-form__link-button"
-            onClick={() => {
-              setUseManualAddress(false)
-              updateField('address', '')
-            }}
-          >
-            Search for the address instead
-          </button>
-        </>
+      {form.address.trim() && (
+        <AddressGeocoder
+          key={form.address}
+          address={form.address}
+          initialResult={geocoderSeed}
+          onConfirm={(lat, lng) => setConfirmedCoords({ lat, lng })}
+        />
       )}
 
       <div className="event-form__row">

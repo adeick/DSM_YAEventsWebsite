@@ -36,11 +36,24 @@ function DraggableMarker({ position, onMove }) {
 // shows a small map so the result can be visually confirmed — or
 // dragged into place — before it's usable. Calls onConfirm(lat, lng)
 // only when the admin explicitly confirms.
-export default function AddressGeocoder({ address, onConfirm }) {
-  const [status, setStatus] = useState('idle') // idle | loading | found | error
-  const [displayName, setDisplayName] = useState('')
-  const [position, setPosition] = useState(null) // [lat, lon]
-  const [confirmed, setConfirmed] = useState(false)
+//
+// `initialResult` (optional {lat, lon, displayName, confirmed?}) skips
+// straight to the "found" map-preview state instead of idle — used
+// when a LocationSearchInput prediction already supplied precise
+// coordinates, so there's no need to re-geocode the address text it
+// derived (and Nominatim could well return something less precise
+// than the original POI match anyway). `confirmed: true` skips even
+// further, straight to the compact confirmed-bar — used when
+// populating an edit form for an event whose location was already
+// confirmed previously. This only works because the parent remounts
+// this component (via `key`) whenever the address changes, so these
+// useState initializers re-run fresh each time rather than needing an
+// effect to react to a changing prop.
+export default function AddressGeocoder({ address, initialResult, onConfirm }) {
+  const [status, setStatus] = useState(initialResult ? 'found' : 'idle') // idle | loading | found | error
+  const [displayName, setDisplayName] = useState(initialResult?.displayName || '')
+  const [position, setPosition] = useState(initialResult ? [initialResult.lat, initialResult.lon] : null) // [lat, lon]
+  const [confirmed, setConfirmed] = useState(!!initialResult?.confirmed)
 
   async function handleLookup() {
     if (!address.trim()) return

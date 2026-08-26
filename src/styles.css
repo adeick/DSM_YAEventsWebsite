@@ -240,6 +240,31 @@ body {
   background: var(--line);
 }
 
+/* OrganizerInput's dropdown arrow — sits in the same corner as
+   .address-input__clear (reusing that field's right-padding) but is
+   always visible rather than conditional on there being text to clear. */
+.organizer-input__toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.organizer-input__toggle:hover {
+  color: var(--ink);
+  background: var(--line);
+}
+
 .address-input__predictions {
   position: absolute;
   z-index: 20;
@@ -1033,6 +1058,25 @@ body {
   object-fit: cover;
 }
 
+/* Small icon shown alongside the name/label — same footprint as
+   .event-detail__organizer-photo since it plays a similar visual
+   role, just sourced from the organization instead of the event. */
+.event-detail__organizer-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+/* A label REPLACES the name text entirely, so unlike the logo above
+   it isn't a small fixed-size icon — capped to a max height/width so
+   an organization's label (whatever its native aspect ratio) doesn't
+   dominate the card. */
+.event-detail__organizer-label {
+  max-height: 32px;
+  max-width: 220px;
+  object-fit: contain;
+}
+
 .event-detail__address {
   display: inline-flex;
   align-items: center;
@@ -1467,24 +1511,7 @@ body {
   border: 1px solid var(--line);
 }
 
-/* Plain-looking inline toggle for switching between the search and
-   manual-address flows — deliberately understated so it doesn't
-   compete with the real form fields and buttons. */
-.event-form__link-button {
-  align-self: flex-start;
-  font-family: inherit;
-  font-size: 12px;
-  color: var(--ink-soft);
-  text-decoration: underline;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
 
-.event-form__link-button:hover {
-  color: var(--ink);
-}
 
 .description-field {
   display: flex;
@@ -2142,4 +2169,227 @@ body {
     margin-top: 10px;
     padding-top: 8px;
   }
+}
+/* ImageManager — the admin's "Manage images" section. Every button
+   here has its own explicit class (never a bare `button` element
+   selector) after the .event-form__submit specificity bug earlier in
+   this project: a blanket `.image-manager button` rule would have the
+   same problem of silently outranking any more specific button style
+   nested inside it. */
+.image-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.image-manager h2 {
+  margin: 0;
+}
+
+.image-manager__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.image-manager__section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.image-manager__section h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.image-manager__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.image-manager__section select {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  align-self: flex-start;
+  min-width: 220px;
+}
+
+.image-manager__mode-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-manager__mode-button {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: none;
+  cursor: pointer;
+}
+
+.image-manager__mode-button + .image-manager__mode-button {
+  border-left: 1px solid var(--line);
+}
+
+.image-manager__mode-button--active {
+  color: var(--paper);
+  background: var(--accent);
+}
+
+.image-manager__theme-pair {
+  display: flex;
+  gap: 16px;
+}
+
+.image-manager__upload-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Fixed dark backdrop (not tied to the admin's own light/dark theme)
+   so a light-colored logo/label — the common case for something meant
+   to sit on a dark page background — is actually visible while
+   uploading, instead of disappearing against a light preview box. */
+.image-manager__upload-slot--dark {
+  padding: 10px;
+  background: #1c1c1a;
+  border-radius: 8px;
+}
+
+.image-manager__upload-slot--dark .image-manager__slot-label {
+  color: #cfcfc9;
+}
+
+.image-manager__upload-slot--dark .image-manager__preview {
+  background: #1c1c1a;
+  border-color: #3a3a36;
+}
+
+.image-manager__slot-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.image-manager__preview {
+  max-width: 160px;
+  max-height: 80px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--paper);
+}
+
+.image-manager__upload-button {
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.image-manager__add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.image-manager__add-form input[type='text'] {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  flex: 1;
+  min-width: 180px;
+}
+
+.image-manager__add-form button {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--paper);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.image-manager__add-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.image-manager__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.image-manager__grid li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.image-manager__grid img {
+  width: 100%;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.image-manager__grid button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
 }

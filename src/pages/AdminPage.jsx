@@ -4,11 +4,16 @@ import { supabase } from '../supabaseClient'
 import LoginForm from '../components/LoginForm'
 import EventForm from '../components/EventForm'
 import AdminEventList from '../components/AdminEventList'
+import ImageManager from '../components/ImageManager'
 
 export default function AdminPage() {
   const session = useSession()
   const [refreshKey, setRefreshKey] = useState(0)
   const [editingEvent, setEditingEvent] = useState(null)
+  // Bumped by ImageManager so EventForm's own (separately-fetched)
+  // organizations/preview-images dropdowns pick up a newly uploaded
+  // image without needing a full page reload.
+  const [imagesVersion, setImagesVersion] = useState(0)
 
   if (session === undefined) {
     return <p className="event-list__status">Loading…</p>
@@ -48,8 +53,10 @@ export default function AdminPage() {
           editingEvent={editingEvent}
           onSaved={() => setRefreshKey((k) => k + 1)}
           onCancelEdit={() => setEditingEvent(null)}
+          imagesVersion={imagesVersion}
         />
         <AdminEventList refreshKey={refreshKey} onEdit={setEditingEvent} />
+        <ImageManager onImagesChanged={() => setImagesVersion((v) => v + 1)} />
       </div>
     </div>
   )

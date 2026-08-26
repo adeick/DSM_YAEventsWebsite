@@ -120,7 +120,9 @@ export default function PublicPage({ previewUnpublished = false }) {
       // too — everywhere else, only published events are fetched.
       let query = supabase
         .from('events')
-        .select('*')
+        .select(
+          '*, organizer_org:organizations(name, image_mode, logo_light_url, logo_dark_url, label_light_url, label_dark_url)'
+        )
         .gte('event_date', new Date().toISOString())
         .order('event_date', { ascending: true })
 
@@ -450,6 +452,7 @@ export default function PublicPage({ previewUnpublished = false }) {
                   selectedEvent={selectedEvent}
                   onSelectEvent={handleSelectEvent}
                   onCloseEvent={handleCloseEvent}
+                  theme={theme}
                 />
               </div>
 
