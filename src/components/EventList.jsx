@@ -12,6 +12,7 @@ export default function EventList({
   selectedEvent,
   onSelectEvent,
   onCloseEvent,
+  theme,
 }) {
   if (loading) {
     return <p className="event-list__status">Loading events…</p>
@@ -32,7 +33,9 @@ export default function EventList({
           <EventCard key={event.id} event={event} onSelect={onSelectEvent} />
         ))}
       </div>
-      {selectedEvent && <EventDetailCard event={selectedEvent} onClose={onCloseEvent} />}
+      {selectedEvent && (
+        <EventDetailCard event={selectedEvent} onClose={onCloseEvent} theme={theme} />
+      )}
     </>
   )
 }

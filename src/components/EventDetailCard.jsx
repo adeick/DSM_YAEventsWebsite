@@ -10,7 +10,7 @@ import { renderFormattedText } from '../utils/renderFormattedText'
 // sliding, transformed element), neither of which is a good home for
 // a two-photo detail card. 180ms matches the CSS animation duration —
 // keep in sync if either changes.
-export default function EventDetailCard({ event, onClose }) {
+export default function EventDetailCard({ event, onClose, theme }) {
   const { isClosing, startClosing: handleClose } = useClosingAnimation(onClose, 180)
   const [copied, setCopied] = useState(false)
 
@@ -40,6 +40,26 @@ export default function EventDetailCard({ event, onClose }) {
     hour: 'numeric',
     minute: '2-digit',
   })
+
+  // organizer_org comes from the events→organizations join in
+  // PublicPage's query — only present when the admin picked a known
+  // organization (via OrganizerInput's dropdown) rather than typing a
+  // one-off name. image_mode ('logo' | 'label') is a deliberate
+  // per-organization choice (see ImageManager) — respected here so an
+  // org that switched modes, or has a stray upload left over from
+  // before the toggle existed, doesn't show the wrong one. Each
+  // prefers the URL matching the current theme, but falls back to the
+  // other theme's version rather than dropping to plain text/nothing
+  // if only one was uploaded.
+  const org = event.organizer_org
+  const orgLogoUrl =
+    org && org.image_mode === 'logo'
+      ? (theme === 'dark' ? org.logo_dark_url : org.logo_light_url) || org.logo_dark_url || org.logo_light_url
+      : null
+  const orgLabelUrl =
+    org && org.image_mode === 'label'
+      ? (theme === 'dark' ? org.label_dark_url : org.label_light_url) || org.label_dark_url || org.label_light_url
+      : null
 
   return createPortal(
     <div
@@ -73,14 +93,27 @@ export default function EventDetailCard({ event, onClose }) {
 
           {event.organizer && (
             <div className="event-detail__organizer">
-              {event.organizer_photo_url && (
-                <img
-                  className="event-detail__organizer-photo"
-                  src={event.organizer_photo_url}
-                  alt={event.organizer}
-                />
+              {orgLogoUrl && (
+                <img className="event-detail__organizer-logo" src={orgLogoUrl} alt="" />
               )}
-              <span>{event.organizer}</span>
+              {orgLabelUrl ? (
+                <img
+                  className="event-detail__organizer-label"
+                  src={orgLabelUrl}
+                  alt={org.name || event.organizer}
+                />
+              ) : (
+                <>
+                  {event.organizer_photo_url && (
+                    <img
+                      className="event-detail__organizer-photo"
+                      src={event.organizer_photo_url}
+                      alt={event.organizer}
+                    />
+                  )}
+                  <span>{event.organizer}</span>
+                </>
+              )}
             </div>
           )}
 

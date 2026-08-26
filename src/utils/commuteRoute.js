@@ -47,6 +47,14 @@ function mapGeoapifyResults(data) {
     lat: r.lat,
     lon: r.lon,
     displayName: r.formatted,
+    // Only populated for POI/venue matches (Geoapify's `amenity`
+    // result type) — a plain street address has no separate "name".
+    // Used by LocationSearchInput to fill the venue-name field
+    // distinctly from the address, instead of dumping the whole
+    // formatted string into both.
+    name: r.name || null,
+    addressLine1: r.address_line1 || null,
+    addressLine2: r.address_line2 || null,
     confidence: r.rank?.confidence ?? 0,
     resultType: r.result_type,
   }))
