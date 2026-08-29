@@ -9,6 +9,14 @@ const MARKER_ICON = L.divIcon({
   iconAnchor: [8, 8],
 })
 
+// Same CARTO key requirement as ChurchMap's TILE_URLS — see the
+// comment there. Reads the same VITE_CARTO_API_KEY env var, so
+// setting it once covers both maps.
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY
+const TILE_URL =
+  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' +
+  (CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : '')
+
 // Dragging updates the pin's own position immediately (and clears
 // `confirmed` in the parent) — that's what lets an admin correct a
 // geocoder result that's close but not quite right, rather than being
@@ -108,7 +116,7 @@ export default function AddressGeocoder({ address, initialResult, onConfirm }) {
             <MapContainer center={position} zoom={16} className="geocoder__map-inner">
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                url={TILE_URL}
                 subdomains="abcd"
               />
               <DraggableMarker

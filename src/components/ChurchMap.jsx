@@ -466,9 +466,18 @@ function ChurchCard({ church, onClose, schedule, updatedAtLabel }) {
 // The two CARTO basemaps this toggle switches between. Add more
 // entries here (and a corresponding button state) if you want to
 // offer a third option later, e.g. Voyager.
+//
+// CARTO now requires a (free) API key for these raster tile
+// endpoints — requests without one still work, but get a repeated
+// "API KEY REQUIRED" watermark stamped across the map (see chat).
+// Get a key at https://carto.com/basemaps/apikey and put it in your
+// .env file as VITE_CARTO_API_KEY (same pattern as
+// VITE_GEOAPIFY_API_KEY below) — no code change needed beyond that.
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY
+const CARTO_KEY_PARAM = CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : ''
 const TILE_URLS = {
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  light: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
+  dark: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY_PARAM}`,
 }
 
 // Fallback center used only until churches load and fitBounds takes over.
