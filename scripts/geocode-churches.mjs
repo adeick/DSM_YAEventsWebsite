@@ -23,10 +23,15 @@ const churches = [
 //   { name: "St. Pius X", address: "3663 66th St, Urbandale, IA" },
 //   { name: "Sacred Heart", address: "1627 Grand Ave, West Des Moines, IA" },
 //   { name: "St. Theresa", address: "1230 Merle Hay Rd, Des Moines, IA" },
-  { name: "St. Joseph", address: "3300 Easton Blvd, Des Moines, IA" },
-  { name: "St. Peter", address: "612 E 18th St, Des Moines, IA" },
-  { name: "St. Mary", address: "4600 Meredith Dr, Des Moines, IA" },
-  { name: "St. Catherine of Siena", address: "1150 28th Street, Des Moines, IA" },
+  // { name: "St. Joseph", address: "3300 Easton Blvd, Des Moines, IA" },
+  // { name: "St. Peter", address: "612 E 18th St, Des Moines, IA" },
+  // { name: "St. Mary", address: "4600 Meredith Dr, Des Moines, IA" },
+  // { name: "St. Catherine of Siena", address: "1150 28th Street, Des Moines, IA" },
+  { name: "St. Elizabeth Seton", address: "2566 Scotch Ridge Rd, Carlisle, IA" },
+  { name: "St. Patrick", address: "3396 155th St, Cumming, IA" },
+  { name: "St. Boniface", address: "1200 S Warrior Ln, Waukee, IA" },
+  { name: "Sts. John and Paul", address: "1401 1st Ave S, Altoona, IA" },
+  { name: "St. John the Apostle", address: "720 Orchard Hills Dr, Norwalk, IA" },
 ]
 
 async function geocode(address) {
